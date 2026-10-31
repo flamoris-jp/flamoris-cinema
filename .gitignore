@@ -25,3 +25,16 @@ temp/
 .cache/
 
 # Language- and runtime-specific ignores belong in each generated repository.
+
+# Python and Cinema local outputs
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+*.blend
+*.blend[0-9]*
+*.anim.json
+*.take.json
+renders/

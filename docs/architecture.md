@@ -1,0 +1,61 @@
+# Cinema architecture and next implementation slices
+
+## Authority and dependency direction
+
+Cinema is a renderer-independent scene/performance library. It can run on Linux
+and Windows without Blender. No service is started by importing or installing it.
+The current implementation uses only Python's standard library at runtime.
+
+| Component | Authority | Current connection |
+| --- | --- | --- |
+| Glyph | Letterform geometry, occurrence identity, style/provenance | Planned read-only actor adapter, not implemented |
+| Cinema contracts | Scene entities, clock, limits and sampled performance | Implemented Python validators and take bundles |
+| Cinema simulation | Reference sphere/floor trajectory | Implemented 120 Hz gravity, normal restitution, linear velocity |
+| Blender adapter | Mapping portable subset into/from native projects | Source implemented; live acceptance pending |
+| Blender | Native scene editing and offline rendering | Optional local process; install handled separately |
+| Kachinco | Clips, audio, editorial timing, compositing, final export | Planned PNG/media handoff; no project mutation implemented |
+| AI director | Bounded scene/take proposals | Future client of the same validators, no execution service yet |
+
+The adapter imports the core, never the reverse. No second timeline, document
+history store, Hub/MCP stack or runtime manager is introduced. FLAMORIS Commons
+currently provides policies/foundations rather than an existing scene/physics
+package; no shared scene implementation is duplicated.
+
+## Portable revision model
+
+A scene contains initial conditions and static staging. A take adds a sampled
+performance. A renderer consumes that take plus a camera choice. Camera/lighting
+edits can create another scene revision using unchanged sampled motion. Blender
+export returns a new take; it never silently overwrites or merges the source.
+Do not run simulation again to render an edited take.
+
+Multiple cameras are separate shots of the same performance, not alternate
+physics histories. Native Blender extras stay in the native project. The supported
+subset is documented in [the bridge contract](blender-bridge.md), with strict
+structural rejection where data would otherwise be misrepresented.
+
+## Next slices, in order
+
+1. **Real Blender acceptance:** run the included roundtrip test and inspect the
+   two-camera CPU render. Record Blender version and results before claiming a
+   supported deployment. GPU setup belongs to the separate runtime workflow.
+2. **Glyph 2.5D actor:** inspect the actual Glyph bundle contract; preserve source
+   checksum, occurrence/stroke IDs, holes and fill rules. Specify pixel-to-metre
+   conversion, origin/pivot, read-only asset roots and collision proxy separately
+   from visible geometry. This needs a new geometry contract, not extra ad hoc
+   properties accepted by the existing sphere validator.
+3. **Rigid-body backend:** choose an existing maintained solver with explicit
+   license/portability review, collision events and a fixed clock; provide rotations
+   and collision shapes under a new contract version. The reference simulator is
+   retained for simple fixtures, not expanded into a home-grown general solver.
+4. **Kachinco handoff:** render PNG/RGBA or encoded media plus shot fps/frame range
+   and source-take identity. Kachinco decides timeline placement; Cinema does not
+   modify Kachinco projects behind its editor.
+5. **AI authoring:** allowlisted declarative actor/camera operations with validation
+   and revision selection. No raw remote Blender Python or autonomous installation.
+
+The prototype is not yet the walk → trip → fall → recover film. Sphere/floor
+contact is implemented; letter geometry, obstacle collision and character acting
+remain separate work. Track the larger milestone in
+[Kachinco #124](https://github.com/flamoris-jp/flamoris-kachinco/issues/124)
+and the Glyph boundary in [Glyph #3](https://github.com/flamoris-jp/flamoris-glyph/issues/3).

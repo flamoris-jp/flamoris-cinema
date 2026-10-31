@@ -2,7 +2,16 @@
   "schema_version": 1,
   "fps": 30,
   "duration_seconds": 5,
+  "render": {"width": 1280, "height": 720},
   "actors": [
-    {"id": "red_actor_proxy", "position": [0, 0, 3.5], "radius": 0.65, "color": [0.8, 0.05, 0.1]}
+    {"id": "red_actor_proxy", "position": [0, 0, 3.5], "radius": 0.65, "color": [0.8, 0.05, 0.1], "velocity": [0.35, 0, 0], "restitution": 0.3}
+  ],
+  "cameras": [
+    {"id": "wide", "position": [7, -10, 6], "target": [0.7, 0, 1.5], "fov_degrees": 50},
+    {"id": "close", "position": [3.5, -5, 2.6], "target": [0.7, 0, 1.2], "fov_degrees": 45}
+  ],
+  "lights": [
+    {"id": "key", "position": [2, -4, 7], "color": [1, 0.9, 0.8], "energy": 1500},
+    {"id": "rim", "position": [-3, 2, 4], "color": [0.5, 0.65, 1], "energy": 1000}
   ]
 }

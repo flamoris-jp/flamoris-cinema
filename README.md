@@ -1,60 +1,83 @@
 # FLAMORIS Cinema
 
-**AI-directed scene, animation and cinematic rendering infrastructure for the FLAMORIS ecosystem.**
+**Portable scene, sampled animation and cinematic rendering infrastructure for FLAMORIS.**
 
-**Status: prototype bootstrap (0.1, unmerged).** This repository contains a portable scene JSON v1, a bounded fixed-step vertical-gravity simulation, a Blender one-way importer, and unit tests. It does **not** contain a full 3D/rigid-body engine, a live AI director, an MCP service, or a verified LIME Blender installation.
+シーンと演技データを保持し、同じ演技を複数のカメラから撮影するための基盤です。
+Glyphは文字の形、Cinemaは空間と演技、Blenderはネイティブ編集と描画、Kachincoは編集と音を担当します。
 
-## Repository identity / 何者か
+**Status: development prototype, 0.1.0.** Implemented: validated scene/take contracts,
+camera-independent sphere/floor simulation and Blender subset importer/exporter.
+Portable core tests pass locally; real Blender roundtrip/render acceptance is pending.
+This is not a full rigid-body engine, character animation system or AI film director.
 
-FLAMORIS Cinema represents editable scenes and animation independently of a particular rendering backend. The first experiment is a red actor proxy falling onto the ground, with motions calculated independently from the camera or renderer.
+## Identity and ownership
 
-### Owns
-- Versioned scene/actor/motion contracts, physics and camera abstraction (future)
-- Scene simulation and render-adapter interfaces
-- Explicitly supported Blender data interchange
+Cinema owns portable scene definitions, sampled performances, the reference
+simulation and renderer adapters. Glyph owns letterforms, vector shapes and Style
+DNA. Kachinco/KineticTypo own timeline editing, subtitles, audio and final export.
+Generation owns generated assets/model inference. Blender owns native projects,
+shaders, modifiers and renderer features beyond the supported interchange subset.
 
-### Does not own
-- **Glyph** owns letterforms, vector shapes, Style DNA and glyph bundle provenance.
-- **Kachinco / KineticTypo** own timeline editing, compositing, subtitles and final video export.
-- **FLAMORIS Generation** owns generated images, video, audio and model inference.
-- **Blender** owns its editable project files and native scene/render features.
+Start at the [FLAMORIS organization map](https://github.com/flamoris-jp/.github).
+See [architecture and next slices](docs/architecture.md),
+[scene/time contract](docs/scene-contract.md), and [Blender bridge](docs/blender-bridge.md).
 
-See [Blender bridge design](docs/blender-bridge.md). See [Glyph](https://github.com/flamoris-jp/flamoris-glyph) and [Kachinco](https://github.com/flamoris-jp/flamoris-kachinco).
+## Install and test
 
-## Install and first test
-
-Python 3.11+ on Windows/Linux. Standard-library-only Cinema prototype; Blender is optional.
+Python 3.11+; runtime uses the standard library. Core is portable across Windows
+and Linux; Blender is optional and installed separately.
 
 ```sh
 python -m pip install -e .
 python -m unittest discover -s tests -v
-flamoris-cinema examples/red_falls.scene.json --out red.anim.json
+python -m flamoris_cinema.core examples/red_falls.scene.json --out red.anim.json
+python -m flamoris_cinema.core examples/red_falls.scene.json --animation red.anim.json --validate-only
 ```
 
-The output is explicit per-frame positions at 30 fps. It refuses to overwrite existing output. The physics is deliberately elementary: 120 Hz fixed integration, vertical gravity, floor contact for spherical proxy actors, no rotation, actor collisions, bounce, or walking animation.
+Installed CLI `flamoris-cinema` accepts the same arguments. Output paths must be
+new. `--animation FILE --out NEW_FILE` reuses an existing sampled performance
+without simulation. `--validate-only` validates inputs without writing.
 
-### Optional Blender import
+The sample has a red **sphere proxy**, two cameras and two point lights; it is not
+yet the actual 赤 Glyph. Physics uses 120 Hz gravity, sphere/floor contact, normal
+restitution and constant horizontal velocity. No actor collisions, rotation,
+friction, obstacle trip, walking or recovery are implemented.
+
+## Optional Blender workflow
+
+Target: Blender 4.5 LTS; actual version acceptance pending. Run from the checkout:
 
 ```sh
-blender -b --python blender/import_scene.py -- examples/red_falls.scene.json red.anim.json red.blend
+blender -b --python-exit-code 1 --python blender/import_scene.py -- examples/red_falls.scene.json red.anim.json red-wide.blend --camera wide
+blender -b --python-exit-code 1 --python blender/import_scene.py -- examples/red_falls.scene.json red.anim.json red-close.blend --camera close
 ```
 
-This writes an editable Blender scene with sphere proxies and transform keyframes. Blender must be installed and accessible on PATH. Import does not prove a render or LIME deployment has occurred. It also does not import SVG Glyph geometry yet.
+Add `--render-dir renders/wide` to render a CPU PNG sequence into a new directory.
+Both commands use the same motion. The importer creates a new Blender scene and
+retains existing scenes. It does not need Cinema installed inside Blender's Python.
 
-## Roadmap
+After supported edits in Blender, save the project as `red-edited.blend`:
 
-1. Define authoritative scene schema (transforms, cameras, lights, material subsets, stable actor IDs).
-2. Add proper rigid-body physics, 2.5D glyph geometry import and collision shapes.
-3. Blender bidirectional **supported-subset** bridge with clear conflict resolution and round-trip tests.
-4. Camera renders and Kachinco asset/timeline integration.
-5. AI director planning scenes under bounded declarative APIs, never arbitrary remote Blender Python.
+```sh
+blender -b red-edited.blend --python-exit-code 1 --python blender/export_scene.py -- edited.take.json
+blender -b --python-exit-code 1 --python blender/import_scene.py -- edited.take.json roundtrip.blend --camera close
+```
 
-## Safety and portability
+Round trip covers sampled actor translation, flat RGB, static perspective cameras
+and point lights. Geometry changes, rigs, modifiers and other listed structural
+features are rejected. Native renderer cosmetics remain in `.blend`. See the
+[precise supported-subset table and acceptance procedure](docs/blender-bridge.md).
+No installation, live service, MCP endpoint or GPU setup is included.
 
-Scene inputs must be validated. Prefer explicit local asset roots, predictable IDs, bounded simulations and isolated render jobs. Never expose raw Blender scripting as a public AI-execution API. Do not install Blender in ComfyUI's virtual environment or assume AMD ROCm support for PyTorch guarantees compatible Blender GPU rendering.
+## Development checks
+
+CI defines Python 3.11–3.13 on Windows/Linux. The real-Blender test is skipped when
+Blender is absent; set `BLENDER` to its executable path to enable it. A skipped test
+is not runtime acceptance. Core sampling, validation, camera independence, take
+compatibility and CLI overwrite protection have automated tests.
 
 ## License
 
-Code is Apache 2.0 (see [LICENSE](LICENSE)). Third-party tools and produced assets retain their own licensing terms.
-
-FLAMORIS is open-source creative software. Commercial use is welcome under applicable licenses; no individual support is guaranteed.
+Code is [Apache 2.0](LICENSE). Third-party tools, models and produced assets retain
+their own applicable terms. Commercial use of the code is welcome; individual
+support is not guaranteed.

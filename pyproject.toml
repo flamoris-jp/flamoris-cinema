@@ -7,7 +7,7 @@ name = "flamoris-cinema"
 version = "0.1.0"
 description = "Portable scene contract and Blender bridge for FLAMORIS Cinema"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
 dependencies = []
 
 [project.scripts]

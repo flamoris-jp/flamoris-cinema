@@ -1,78 +1,62 @@
-"""Minimal deterministic 2.5D scene contract; Blender is an optional renderer."""
+"""Camera-independent fixed-step sphere/floor prototype (not a rigid-body engine)."""
 import argparse
-import json
-import math
 from pathlib import Path
+from .contracts import VERSION, frame_count, motion_id, validate_animation, validate_scene
+from .io import read_json, write_json
 
-VERSION = 1
-
-def validate_scene(scene):
-    if not isinstance(scene, dict) or scene.get("schema_version") != VERSION:
-        raise ValueError("unsupported scene schema")
-    fps = scene.get("fps")
-    duration = scene.get("duration_seconds")
-    if type(fps) is not int or not 1 <= fps <= 120:
-        raise ValueError("fps must be integer in 1..120")
-    if type(duration) not in (int, float) or not math.isfinite(duration) or not 0 < duration <= 120:
-        raise ValueError("invalid duration")
-    actors = scene.get("actors")
-    if not isinstance(actors, list) or not 1 <= len(actors) <= 100:
-        raise ValueError("actors must be a bounded nonempty list")
-    names = set()
-    for actor in actors:
-        if not isinstance(actor, dict) or set(actor) != {"id", "position", "radius", "color"}:
-            raise ValueError("actor properties are invalid")
-        name = actor["id"]
-        if not isinstance(name, str) or not name or len(name) > 100 or name in names:
-            raise ValueError("invalid or duplicate actor id")
-        names.add(name)
-        pos = actor["position"]
-        if not isinstance(pos, list) or len(pos) != 3 or any(type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 10000 for v in pos):
-            raise ValueError("invalid position")
-        radius = actor["radius"]
-        if type(radius) not in (int, float) or not math.isfinite(radius) or not 0 < radius <= 100:
-            raise ValueError("invalid radius")
-        color = actor["color"]
-        if not isinstance(color, list) or len(color) != 3 or any(type(v) not in (int, float) or not 0 <= v <= 1 for v in color):
-            raise ValueError("invalid RGB color")
-    return scene
 
 def simulate(scene):
-    """Fixed 1/120-s vertical gravity with floor contact; spheres, no interactions."""
+    """120 Hz semi-implicit Euler; linear interpolation to any integer output fps."""
     validate_scene(scene)
-    ticks_per_frame = 120 // scene["fps"] if 120 % scene["fps"] == 0 else None
-    if ticks_per_frame is None:
-        raise ValueError("prototype physics requires fps dividing 120")
+    states = {a["id"]: (list(map(float, a["position"])),
+                         list(map(float, a.get("velocity", [0, 0, 0])))) for a in scene["actors"]}
+    count = frame_count(scene)
+    tick = 0
+    before = after = {name: p[:] for name, (p, _) in states.items()}
     frames = []
-    state = {a["id"]: [float(a["position"][2]), 0.0] for a in scene["actors"]}
-    count = round(scene["duration_seconds"] * scene["fps"])
     for frame in range(count):
-        current = {}
-        for a in scene["actors"]:
-            z, velocity = state[a["id"]]
-            x, y = a["position"][:2]
-            current[a["id"]] = [x, y, z]
-        frames.append({"frame": frame, "positions": current})
-        for _ in range(ticks_per_frame):
-            for a in scene["actors"]:
-                z, velocity = state[a["id"]]
-                velocity -= 9.81 / 120
-                z += velocity / 120
-                if z < a["radius"]:
-                    z, velocity = a["radius"], 0.0
-                state[a["id"]] = [z, velocity]
-    return {"schema_version": VERSION, "fps": scene["fps"], "frames": frames}
+        numerator = frame * 120
+        lo, remainder = divmod(numerator, scene["fps"])
+        needed = lo + bool(remainder)
+        while tick < needed:
+            before = after
+            for actor in scene["actors"]:
+                p, v = states[actor["id"]]
+                v[2] -= 9.81 / 120
+                for axis in range(3):
+                    p[axis] += v[axis] / 120
+                if p[2] < actor["radius"]:
+                    p[2] = float(actor["radius"])
+                    v[2] = -v[2] * actor.get("restitution", 0)
+                    if v[2] < 9.81 / 120:
+                        v[2] = 0.0
+            after = {name: p[:] for name, (p, _) in states.items()}
+            tick += 1
+        alpha = remainder / scene["fps"]
+        positions = {name: ([x + (y - x) * alpha for x, y in zip(before[name], after[name])]
+                             if remainder else after[name][:]) for name in states}
+        frames.append({"frame": frame, "positions": positions})
+    result = {"schema_version": VERSION, "fps": scene["fps"], "motion_id": motion_id(scene), "frames": frames}
+    return validate_animation(result, scene)
 
-def main():
-    parser = argparse.ArgumentParser()
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scene", type=Path)
-    parser.add_argument("--out", type=Path, required=True)
-    args = parser.parse_args()
-    data = json.loads(args.scene.read_text(encoding="utf-8"))
-    result = simulate(data)
-    if args.out.exists():
-        parser.error("output exists, refusing overwrite")
-    args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    parser.add_argument("--out", type=Path)
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--animation", type=Path, help="validate or reuse a baked performance")
+    args = parser.parse_args(argv)
+    if not args.validate_only and args.out is None:
+        parser.error("--out is required unless --validate-only")
+    try:
+        scene = validate_scene(read_json(args.scene))
+        animation = validate_animation(read_json(args.animation), scene) if args.animation else None
+        if not args.validate_only:
+            write_json(args.out, animation if animation is not None else simulate(scene))
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+
 
 if __name__ == "__main__":
     main()
