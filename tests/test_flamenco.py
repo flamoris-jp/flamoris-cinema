@@ -10,7 +10,8 @@ class FlamencoProposalTests(unittest.TestCase):
     def test_clock_native_scene_and_explicit_shared_root(self):
         scene=walk_take(read_json(Path(__file__).resolve().parents[1]/'examples/red_glyph.take.json'))['scene']
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp);blend=root/'walk.blend';blend.write_bytes(b'file-presence-fixture')
+            # Windows may return an 8.3 TEMP alias; compare canonical paths.
+            root=Path(tmp).resolve();blend=root/'walk.blend';blend.write_bytes(b'file-presence-fixture')
             kwargs=dict(shared_root=root,blend_file=blend,output_root=root/'renders',scene_name='Cinema.001',
                         name='Red-Walk',type_etag='current-manager-etag')
             job=render_job(scene,**kwargs)
