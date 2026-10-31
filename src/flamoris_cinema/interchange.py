@@ -14,7 +14,7 @@ def make_take(scene, animation):
 
 def validate_take(take):
     fields(take, ("format", "version", "scene", "animation"), path="take")
-    if take["format"] != "flamoris-cinema-take" or type(take["version"]) is not int or take["version"] not in (1, 2):
+    if take["format"] != "flamoris-cinema-take" or type(take["version"]) is not int or take["version"] not in (1, 2, 3):
         raise ValueError("unsupported take format")
     validate_scene(take["scene"])
     if take['version'] != take['scene']['schema_version']:

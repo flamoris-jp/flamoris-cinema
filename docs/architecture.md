@@ -15,7 +15,7 @@ Blender. See [Glyph actors](glyph-actors.md).
 | Cinema simulation | Reference sphere/floor trajectory | Implemented 120 Hz gravity, normal restitution, linear velocity |
 | Blender adapter | Mapping portable subset into/from native projects | Sphere CPU/HIP/full sequence and Glyph native preview accepted |
 | Blender | Native scene editing and offline rendering | Optional local process; install handled separately |
-| Kachinco | Clips, audio, editorial timing, compositing, final export | Planned PNG/media handoff; no project mutation implemented |
+| Kachinco | Clips, audio, editorial timing, compositing, final export | Actual silent-walk MP4 uploaded/inserted/previewed/saved through guarded CLI MCP; no direct project mutation |
 | AI director | Bounded scene/take proposals | Future client of the same validators, no execution service yet |
 
 The adapter imports the core, never the reverse. No second timeline, document
@@ -63,7 +63,8 @@ character performance, the first short and later AI direction are tracked there.
    and revision selection. No raw remote Blender Python or autonomous installation.
 
 The prototype is not yet the walk → trip → fall → recover film. Sphere/floor
-contact and fixed letter geometry import/native preview are accepted;
-obstacle collision and character acting remain future work. Track this in
+contact, fixed letter geometry and an initial authored v3 walk are accepted.
+Physical trip/fall/recovery remains future
+work. See [Glyph performance](glyph-performance.md). Track the larger film in
 [Kachinco #124](https://github.com/flamoris-jp/flamoris-kachinco/issues/124)
 and the Glyph boundary in [Glyph #3](https://github.com/flamoris-jp/flamoris-glyph/issues/3).

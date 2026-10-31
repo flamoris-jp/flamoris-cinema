@@ -14,6 +14,7 @@ import sys
 from .contracts import motion_id, validate_animation, validate_scene
 from .interchange import make_take, validate_take
 from .io import read_json, write_json
+from .articulation import part_tag
 
 META = "cinema_take_v1"
 TAG = "cinema_id"
@@ -135,7 +136,25 @@ def build_scene(scene, animation, camera=None):
     target.render.threads_mode, target.render.threads = "FIXED", 2
     objects = {}
     for actor in scene["actors"]:
-        if scene['schema_version'] == 2:
+        mat = bpy.data.materials.new(actor['id'] + '_color')
+        _make_material(mat,actor['color'])
+        if scene['schema_version'] == 3:
+            from .glyph_blender import build_glyph_mesh, part_metadata
+            obj = bpy.data.objects.new(actor['id'],None)
+            target.collection.objects.link(obj)
+            obj['cinema_parts'] = json.dumps(part_metadata(actor['geometry']['asset']),ensure_ascii=False,sort_keys=True)
+            for pid,pivot in actor['pivots'].items():
+                part = build_glyph_mesh(target,actor,pid)
+                part.name = part_tag(actor['id'],pid)
+                for vertex in part.data.vertices:
+                    vertex.co -= Vector(pivot)
+                part.data.update()
+                part.parent = obj
+                part.location = pivot
+                part.data.materials.append(mat)
+                _mark(part,'glyph_part',part_tag(actor['id'],pid))
+                objects[part_tag(actor['id'],pid)] = part
+        elif scene['schema_version'] == 2:
             from .glyph_blender import build_glyph_mesh
             obj = build_glyph_mesh(target, actor)
         else:
@@ -143,9 +162,8 @@ def build_scene(scene, animation, camera=None):
             obj = bpy.context.object
         obj.name = actor["id"]
         obj.location = actor["position"]
-        mat = bpy.data.materials.new(actor["id"] + "_color")
-        _make_material(mat, actor["color"])
-        obj.data.materials.append(mat)
+        if scene['schema_version'] != 3:
+            obj.data.materials.append(mat)
         _mark(obj, "actor", actor["id"])
         objects[actor["id"]] = obj
     for sample in animation["frames"]:
@@ -153,6 +171,14 @@ def build_scene(scene, animation, camera=None):
             obj = objects[name]
             obj.location = position
             obj.keyframe_insert(data_path="location", frame=sample["frame"] + 1)
+        if scene['schema_version'] == 3:
+            for actor in scene['actors']:
+                for pid,pose in sample['parts'][actor['id']].items():
+                    obj = objects[part_tag(actor['id'],pid)]
+                    obj.location = [p+t for p,t in zip(actor['pivots'][pid],pose['translation'])]
+                    obj.rotation_euler = (0,math.radians(pose['angle_degrees']),0)
+                    obj.keyframe_insert(data_path='location',frame=sample['frame']+1)
+                    obj.keyframe_insert(data_path='rotation_euler',frame=sample['frame']+1)
     # Every integer frame is keyed. Subframe interpolation is Blender-owned and
     # deliberately outside the portable contract (motion blur is disabled).
     for spec in cameras:
@@ -201,6 +227,13 @@ def export_take():
     original = validate_take(json.loads(target[META]))
     scene = deepcopy(original["scene"])
     expected = {a["id"]: "actor" for a in scene["actors"]}
+    part_parents = {}
+    if scene['schema_version'] == 3:
+        for actor in scene['actors']:
+            for pid in actor['pivots']:
+                tag = part_tag(actor['id'],pid)
+                expected[tag] = 'glyph_part'
+                part_parents[tag] = actor['id']
     expected.update({c["id"]: "camera" for c in scene.get("cameras", [])})
     expected.update({c["id"]: "light" for c in scene.get("lights", [])})
     expected["__floor__"] = "floor"
@@ -211,19 +244,24 @@ def export_take():
             errors.append(f"{obj.name}: missing/duplicate/unknown Cinema identity")
             continue
         objects[name] = obj
-        if obj.parent or obj.constraints or obj.modifiers or obj.rigid_body or obj.rigid_body_constraint:
+        allowed_parent = kind == 'glyph_part' and obj.parent is not None and obj.parent.get(TAG) == part_parents[name]
+        if ((obj.parent is not None and not allowed_parent) or (kind == 'glyph_part' and not allowed_parent) or
+                obj.constraints or obj.modifiers or obj.rigid_body or obj.rigid_body_constraint):
             errors.append(f"{name}: parent, constraint, modifier or rigid body is outside v1")
-        expected_type = {"actor": "MESH", "floor": "MESH", "camera": "CAMERA", "light": "LIGHT"}[kind]
+        expected_type = {'actor':'EMPTY' if scene['schema_version']==3 else 'MESH',
+                         'glyph_part':'MESH','floor':'MESH','camera':'CAMERA','light':'LIGHT'}[kind]
         if obj.type != expected_type:
             errors.append(f"{name}: object type changed")
             continue
         if obj.type == "MESH" and (_mesh_digest(obj) != obj.get("cinema_mesh") or obj.data.shape_keys):
             errors.append(f"{name}: geometry edited; portable actor geometry is immutable")
-        if kind != "actor" and (obj.animation_data or getattr(obj.data, "animation_data", None)):
+        if obj.type == 'MESH' and obj.data.animation_data:
+            errors.append(f'{name}: animated mesh data is outside the geometry contract')
+        if kind not in ('actor','glyph_part') and (obj.animation_data or getattr(obj.data, "animation_data", None)):
             errors.append(f"{name}: only actor translation animation is supported")
         if kind in ("camera", "light") and (obj.scale - Vector((1, 1, 1))).length > 1e-6:
             errors.append(f"{name}: camera/light scale is outside v1")
-        if kind == "actor" and obj.rotation_mode != "XYZ":
+        if kind in ('actor','glyph_part') and obj.rotation_mode != "XYZ":
             errors.append(f"{name}: only XYZ rotation mode is supported")
         if kind == "camera" and obj.rotation_mode != "XYZ":
             errors.append(f"{name}: only XYZ camera rotation mode is supported")
@@ -231,6 +269,13 @@ def export_take():
             errors.append(f"{name}: hidden render objects cannot be represented")
     if set(objects) != set(expected):
         errors.append("Cinema objects were added, removed or retagged")
+    if scene['schema_version'] == 3:
+        from mathutils import Matrix
+        for tag,parent_id in part_parents.items():
+            obj = objects.get(tag)
+            if obj is not None and (obj.parent != objects.get(parent_id) or
+                    any(abs(obj.matrix_parent_inverse[i][j]-Matrix.Identity(4)[i][j])>1e-6 for i in range(4) for j in range(4))):
+                errors.append('Glyph part hierarchy or parent inverse changed')
     count = len(original["animation"]["frames"])
     if (target.frame_start, target.frame_end) != (1, count):
         errors.append("frame range changed; v1 keeps the original take duration")
@@ -245,14 +290,20 @@ def export_take():
         target.frame_set(1)
         for actor in scene["actors"]:
             obj = objects[actor["id"]]
-            if scene['schema_version'] == 2:
+            if scene['schema_version'] in (2,3):
                 from .glyph_blender import part_metadata
                 if obj.get('cinema_parts') != json.dumps(part_metadata(actor['geometry']['asset']), ensure_ascii=False, sort_keys=True):
                     raise ValueError('Glyph part identity changed')
-            materials = obj.data.materials
-            if len(materials) != 1 or materials[0] is None:
-                raise ValueError(f"{actor['id']}: exactly one RGB material is required")
-            actor["color"] = _material_color(materials[0])
+            meshes = [objects[part_tag(actor['id'],pid)] for pid in actor['pivots']] if scene['schema_version']==3 else [obj]
+            colors = []
+            for mesh_obj in meshes:
+                materials = mesh_obj.data.materials
+                if len(materials) != 1 or materials[0] is None:
+                    raise ValueError(f"{actor['id']}: exactly one RGB material is required")
+                colors.append(_material_color(materials[0]))
+            if any(any(abs(a-b)>1e-6 for a,b in zip(colors[0],color)) for color in colors[1:]):
+                raise ValueError('Glyph part colors must remain shared')
+            actor['color'] = colors[0]
         floor = objects["__floor__"]
         if ((floor.location - Vector((0, 0, -0.1))).length > 1e-6 or
                 (floor.scale - Vector((10, 10, 0.1))).length > 1e-6 or
@@ -281,12 +332,26 @@ def export_take():
         for index in range(count):
             target.frame_set(index + 1)
             positions = {}
+            parts = {}
             for actor in scene["actors"]:
                 obj = objects[actor["id"]]
                 if (obj.scale - Vector((1, 1, 1))).length > 1e-6 or obj.rotation_euler.to_quaternion().angle > 1e-6:
                     raise ValueError(f"{actor['id']}: actor rotation/scale is outside v1")
+                if scene['schema_version'] == 3 and (obj.delta_location.length>1e-6 or
+                        obj.delta_rotation_euler.to_quaternion().angle>1e-6 or (obj.delta_scale-Vector((1,1,1))).length>1e-6):
+                    raise ValueError('root delta transforms are outside the part-pose contract')
                 positions[actor["id"]] = list(obj.location)
-            frames.append({"frame": index, "positions": positions})
+                if scene['schema_version'] == 3:
+                    parts[actor['id']] = {}
+                    for pid,pivot in actor['pivots'].items():
+                        part = objects[part_tag(actor['id'],pid)]
+                        if ((part.scale-Vector((1,1,1))).length>1e-6 or abs(part.rotation_euler.x)>1e-6 or abs(part.rotation_euler.z)>1e-6 or
+                                part.delta_location.length>1e-6 or part.delta_rotation_euler.to_quaternion().angle>1e-6 or
+                                (part.delta_scale-Vector((1,1,1))).length>1e-6):
+                            raise ValueError('part scale, delta transform or rotation outside local Y is not portable')
+                        parts[actor['id']][pid] = {'translation':[p-v for p,v in zip(part.location,pivot)],
+                                                 'angle_degrees':math.degrees(part.rotation_euler.y)}
+            frames.append({'frame':index,'positions':positions,**({'parts':parts} if scene['schema_version']==3 else {})})
         # The original simulation initial conditions remain intact. The returned
         # animation is authoritative; simulate(scene) explicitly creates a NEW take.
         scene["render"] = {"width": target.render.resolution_x, "height": target.render.resolution_y}

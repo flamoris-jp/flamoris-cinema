@@ -6,6 +6,8 @@ has seven authored stroke IDs. `--glyph` passed native save/reload, hole-cap are
 edited placement and rendered appearance on Blender 5.2.3 LTS. Stage 2 is accepted;
 see [execution evidence](acceptance.md).
 This is static staging and sampled translation, not walking, rotation or physics.
+The additive v3 [part-performance slice](glyph-performance.md) now provides an
+authored walk, while this document retains the accepted v2 static contract.
 
 ## Authority and compatibility
 

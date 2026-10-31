@@ -94,11 +94,13 @@ Curves are sampled at the native 12-step tessellation for this topology check.
             raise ValueError('same-winding nested nonzero contours require a Boolean fill solver')
 
 
-def build_glyph_mesh(target, actor):
+def build_glyph_mesh(target, actor, element_id=None):
     import bpy
     spec = actor['geometry']
     vertices, faces, parts = [], [], []
     for part_index, path in enumerate(spec['asset']['data']['paths']):
+        if element_id is not None and path['element_id'] != element_id:
+            continue
         check_fill_topology(path['commands'])
         curve = bpy.data.curves.new('Cinema Glyph stroke', 'CURVE')
         temporary = bpy.data.objects.new('Cinema Glyph tessellation', curve)

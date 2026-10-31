@@ -13,6 +13,11 @@ immutable 赤 fixture and v2 staging/Blender mapping have also passed external n
 HIP preview acceptance. See [Glyph actors](docs/glyph-actors.md).
 This is not a full rigid-body engine, character animation system or AI film director.
 
+The next accepted slice is an authored **three-second walking 赤**: v3 part poses,
+native save/reload/edited-pose roundtrip, a 72-frame Flamenco HIP render and guarded
+Kachinco CLI import/preview/save. Walking is procedural acting; falling/collision/
+recovery remain future work. See [Glyph performance](docs/glyph-performance.md).
+
 ## Identity and ownership
 
 Cinema owns portable scene definitions, sampled performances, the reference
@@ -47,8 +52,9 @@ The sample has a red **sphere proxy**, two cameras and two point lights; it is n
 yet the actual 赤 Glyph. A separate `examples/red_glyph.take.json` contains the
 actual authored Glyph as a static stage take; it is not a sphere simulation.
 Physics uses 120 Hz gravity, sphere/floor contact, normal
-restitution and constant horizontal velocity. No actor collisions, rotation,
-friction, obstacle trip, walking or recovery are implemented.
+restitution and constant horizontal velocity. That simulator has no actor collisions,
+rotation, friction, obstacle trip, walking or recovery. The v3 walk uses
+separate authored part poses.
 
 ## Optional Blender workflow
 

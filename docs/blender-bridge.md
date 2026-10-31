@@ -58,6 +58,11 @@ Existing output files and render directories are refused.
 | Resolution | Square pixels, 100% dimensions; width and height returned |
 | Rig/modifiers | Parents, constraints, modifiers and rigid bodies rejected; not silently baked |
 
+The additive [v3 part-performance contract](glyph-performance.md) permits one exact
+Glyph EMPTY/child-mesh hierarchy and sampled child local-Y rotation/translation.
+The parent/rotation rejection above continues to apply to v1/v2 and to arbitrary
+rigs; v3 does not promise general Blender skeleton/constraint interoperability.
+
 Export is a **performance and basic scene exchange**, not a complete appearance
 round trip. Native render engine settings, world/background, shadows, surface
 roughness/specularity, light softness, floor material, collections and editor state

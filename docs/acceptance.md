@@ -3,6 +3,8 @@
 **Latest status:** stage 1's full two-camera HIP sphere sequence and stage 2's fixed
 Glyph native HIP preview are accepted. See the corresponding sections below.
 Earlier pending statements describe historical runs.
+The v3 authored walk/native roundtrip, Flamenco movie and Kachinco CLI handoff
+are also accepted as a partial stage 3 / early media-handoff slice.
 
 ## 2026-10-31: Blender 5.2.3 CPU preview
 
@@ -183,3 +185,36 @@ Stage 2's read-only actual-Glyph shape, identity and placement roundtrip is acce
 This does not establish actor rotation, per-part motion, collision, walking,
 recovery, arbitrary outline support, Windows native Blender rendering, or a remote
 MCP/Flamenco render pipeline. Those remain separate integration/acting work.
+
+## 2026-10-31: authored walk → Flamenco → Kachinco CLI accepted
+
+V3 adds explicit per-part pivots, sampled local translation and local-Y rotation.
+The authored seven-stroke 赤 walks four alternating steps over two seconds and
+holds for one second. This is procedural acting; no collision/falling is claimed.
+
+| Check | Result |
+| --- | --- |
+| Portable take | v3, 24 fps, 72 samples, three seconds, 1.8 m root travel; source shape/IDs unchanged |
+| Pure gait checks | Support-point pinning, nonpenetrating feet, swing lift, deterministic regeneration, exact final hold and camera independence passed |
+| Native Blender | 5.2.3 LTS; sphere, static Glyph and walking part-pose tests all executed successfully through a separate background MCP process |
+| Native walk subset | All 72 frames compared, edited arm angle/rename/save/reload/reimport passed; mesh edit, reparenting and root delta-transform rejection passed |
+| Device preparation | RX 9060 XT / HIP / Cycles GPU selected, CPU render device disabled, HIP RT enabled, two threads, eight samples |
+| Shared handoff | Native camera files prepared through connected Blender MCP; existing persistent MCP scene retained |
+| Flamenco | Real Manager 3.9.3 job-check returned 204; built-in simple-blender-render completed all three 24-frame render tasks and preview task on the configured HIP Worker |
+| Movie | All 72 PNGs present; 640×360, H.264, 24 fps, exactly 3.000 seconds, 72 frames; full decode passed |
+| Movie integrity | 83347 bytes; SHA-256 `1ad8904b86f3bda23aeaddd135dcdca25042a0a50b8a2cbeb56afb8eb145a737` |
+| Kachinco CLI | Guarded upload verified matching bytes/hash and 105840000 ticks; new three-second sequence inserted, native preview read and project saved at revision 44 |
+
+Visual sampled-frame review confirms alternating leg/arm movement, horizontal
+travel and the final hold. Native meshes remain rigid strokes; fine acting and
+artistic approval remain human work. Camera geometry passes all samples, but only
+the wide camera was rendered as the complete movie in this slice.
+
+The development container's suite reports 56 passed/3 skipped (Blender absent);
+the three native tests above are independently executed external evidence.
+No authoring-workstation process was needed. No Worker/runtime/service configuration was changed.
+This does not certify general articulated characters, physical balance, trip/fall/
+recovery, arbitrary rotations/rigs, Kachinco sound/final export, or a production
+render scheduler. The data-only Flamenco proposal helper does not submit/retry jobs;
+the accepted submission used the actual Manager schema/check/submit API under
+operator-authorized orchestration. Private runtime paths/receipts belong in Internal.

@@ -5,6 +5,9 @@ Glyph-only scene/take and geometry snapshot are specified in
 [Glyph actors](glyph-actors.md). The fixed Glyph native HIP preview has passed;
 see [acceptance evidence](acceptance.md).
 
+V3 adds bounded sampled Glyph part translation and local-Y rotation with explicit
+acting pivots; see [Glyph performance](glyph-performance.md). V1/v2 are not migrated.
+
 **Status:** implemented Python contract, prototype physics. The executable authority is
 `flamoris_cinema.contracts.validate_scene/validate_animation`; this document explains its semantics.
 No external JSON Schema dependency is required. Unknown properties fail validation.

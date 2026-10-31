@@ -46,11 +46,15 @@ def check_framing(scene, animation, margin=0.05):
             for actor in scene['actors']:
                 delta = [p - c for p, c in zip(sample['positions'][actor['id']], camera['position'])]
                 depth = _dot(delta, forward)
-                if scene['schema_version'] == 2:
+                if scene['schema_version'] in (2,3):
                     from .glyph_asset import local_bounds
-                    low, high = local_bounds(actor['geometry'])
-                    corners = [[d + c for d, c in zip(delta, corner)]
-                               for corner in product(*zip(low, high))]
+                    if scene['schema_version'] == 3:
+                        from .articulation import posed_points
+                        bounds = posed_points(actor,sample['parts'][actor['id']])
+                    else:
+                        low, high = local_bounds(actor['geometry'])
+                        bounds = list(product(*zip(low,high)))
+                    corners = [[d+c for d,c in zip(delta,corner)] for corner in bounds]
                     clearance = min(min((_dot(p, forward) * horizontal - abs(_dot(p, right))) / math.sqrt(1+horizontal**2),
                                         (_dot(p, forward) * vertical - abs(_dot(p, up))) / math.sqrt(1+vertical**2),
                                         _dot(p, forward)-0.1, 1000-_dot(p, forward)) for p in corners)
