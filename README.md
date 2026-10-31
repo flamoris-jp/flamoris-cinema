@@ -9,8 +9,8 @@ Glyphは文字の形、Cinemaは空間と演技、Blenderはネイティブ編�
 camera-independent sphere/floor simulation and Blender subset importer/exporter.
 Portable tests pass locally; Blender 5.2.3 CPU/HIP previews, subset roundtrips and
 two full five-second HIP camera sequences have passed. A read-only Glyph adapter,
-immutable 赤 fixture and v2 staging/Blender mapping are implemented; native Glyph
-acceptance remains pending. See [Glyph actors](docs/glyph-actors.md).
+immutable 赤 fixture and v2 staging/Blender mapping have also passed external native
+HIP preview acceptance. See [Glyph actors](docs/glyph-actors.md).
 This is not a full rigid-body engine, character animation system or AI film director.
 
 ## Identity and ownership
@@ -122,7 +122,7 @@ No runtime/service is started or stopped and user preferences are not saved.
 After reviewing the short HIP preview and temperatures, add `--full --encode` in a
 NEW directory to render complete videos. No resumed-frame mixing is implemented.
 
-### Glyph stage preview (native acceptance pending)
+### Glyph stage preview (native acceptance passed)
 
 ```sh
 python tools/run_blender_smoke.py --blender /path/to/blender --device HIP --gpu-name "RX 9060 XT" --threads 2 --glyph --out /path/to/new-glyph-preview

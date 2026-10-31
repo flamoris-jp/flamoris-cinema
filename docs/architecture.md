@@ -10,10 +10,10 @@ Blender. See [Glyph actors](glyph-actors.md).
 
 | Component | Authority | Current connection |
 | --- | --- | --- |
-| Glyph | Letterform geometry, occurrence identity, style/provenance | Read-only bundle adapter implemented; native actor acceptance pending |
+| Glyph | Letterform geometry, occurrence identity, style/provenance | Read-only bundle adapter; fixed native actor HIP preview accepted |
 | Cinema contracts | Scene entities, clock, limits and sampled performance | Implemented Python validators and take bundles |
 | Cinema simulation | Reference sphere/floor trajectory | Implemented 120 Hz gravity, normal restitution, linear velocity |
-| Blender adapter | Mapping portable subset into/from native projects | Sphere CPU/HIP/full sequence accepted; Glyph native gate pending |
+| Blender adapter | Mapping portable subset into/from native projects | Sphere CPU/HIP/full sequence and Glyph native preview accepted |
 | Blender | Native scene editing and offline rendering | Optional local process; install handled separately |
 | Kachinco | Clips, audio, editorial timing, compositing, final export | Planned PNG/media handoff; no project mutation implemented |
 | AI director | Bounded scene/take proposals | Future client of the same validators, no execution service yet |
@@ -63,7 +63,7 @@ character performance, the first short and later AI direction are tracked there.
    and revision selection. No raw remote Blender Python or autonomous installation.
 
 The prototype is not yet the walk → trip → fall → recover film. Sphere/floor
-contact is accepted. Letter geometry import is implemented with native acceptance
-pending; obstacle collision and character acting remain future work. Track this in
+contact and fixed letter geometry import/native preview are accepted;
+obstacle collision and character acting remain future work. Track this in
 [Kachinco #124](https://github.com/flamoris-jp/flamoris-kachinco/issues/124)
 and the Glyph boundary in [Glyph #3](https://github.com/flamoris-jp/flamoris-glyph/issues/3).

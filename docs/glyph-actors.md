@@ -1,9 +1,10 @@
 # Glyph actors: stage 2 prototype
 
-**Implemented, native acceptance pending.** A read-only adapter snapshots one real
+**Implemented; fixed native HIP preview accepted.** A read-only adapter snapshots one real
 Glyph schema-2 occurrence into a self-contained Cinema v2 take. The fixed 赤 fixture
-has seven authored stroke IDs. `--glyph` must pass native save/reload, hole-cap area,
-edited placement and rendered appearance before stage 2 is accepted.
+has seven authored stroke IDs. `--glyph` passed native save/reload, hole-cap area,
+edited placement and rendered appearance on Blender 5.2.3 LTS. Stage 2 is accepted;
+see [execution evidence](acceptance.md).
 This is static staging and sampled translation, not walking, rotation or physics.
 
 ## Authority and compatibility

@@ -8,7 +8,7 @@ Kachinco owns timelines, sound, compositing and final video export.
 mapping, optional CPU PNG rendering and a real-Blender acceptance script.
 **Verified:** portable tests and reviewed external Blender 5.2.3 CPU/HIP previews and subset roundtrips.
 See [acceptance evidence](acceptance.md): full HIP sphere sequences have passed.
-Glyph native acceptance is pending; performance research is deferred. Target: Blender 5.2.3 LTS.
+The fixed Glyph native HIP preview has passed; performance research is deferred. Target: Blender 5.2.3 LTS.
 The adapter rejects versions older than 4.5; later versions require acceptance.
 
 ## Workflow
@@ -48,7 +48,7 @@ Existing output files and render directories are refused.
 | Data | Import/export semantics |
 | --- | --- |
 | Actor identity | `cinema_id`/`cinema_kind` custom properties; display-name edits allowed; new/deleted/duplicated/retagged entities rejected |
-| Shape | V1 UV sphere proxies; v2 immutable Glyph snapshots tessellated/extruded with stroke face IDs. Edited geometry/shape keys rejected. See [Glyph actors](glyph-actors.md); native Glyph acceptance pending |
+| Shape | V1 UV sphere proxies; v2 immutable Glyph snapshots tessellated/extruded with stroke face IDs. Edited geometry/shape keys rejected. See [Glyph actors](glyph-actors.md); fixed native HIP preview accepted |
 | Actor animation | Translation sampled at every integer output frame; original source conditions retained separately; rotation/scale edits rejected at samples |
 | Material | One opaque static Diffuse BSDF → Material Output graph; export reads shader RGB, not viewport diffuse_color |
 | Camera | Static perspective, horizontal FOV, position, target direction; original target distance retained; roll, shift, DOF, non-unit scale and animation rejected |

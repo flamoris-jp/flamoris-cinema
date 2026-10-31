@@ -2,7 +2,8 @@
 
 This section describes the unchanged **v1 sphere contract**. The additive v2
 Glyph-only scene/take and geometry snapshot are specified in
-[Glyph actors](glyph-actors.md). Native Glyph acceptance is pending.
+[Glyph actors](glyph-actors.md). The fixed Glyph native HIP preview has passed;
+see [acceptance evidence](acceptance.md).
 
 **Status:** implemented Python contract, prototype physics. The executable authority is
 `flamoris_cinema.contracts.validate_scene/validate_animation`; this document explains its semantics.

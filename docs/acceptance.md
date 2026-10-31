@@ -1,8 +1,8 @@
 # Blender acceptance evidence
 
-**Latest status:** stage 1's full two-camera HIP sphere sequence is accepted (see
-the final section). Earlier pending statements below describe historical runs.
-Glyph stage 2 source implementation is present; native acceptance is pending.
+**Latest status:** stage 1's full two-camera HIP sphere sequence and stage 2's fixed
+Glyph native HIP preview are accepted. See the corresponding sections below.
+Earlier pending statements describe historical runs.
 
 ## 2026-10-31: Blender 5.2.3 CPU preview
 
@@ -157,3 +157,29 @@ pass locally. `--glyph` adds a native identity/placement/save-reload gate and a
 synthetic hole-area check before two-camera stills. The development container
 has no Blender; the two native integration tests are skipped. No Glyph native
 success or completed stage 2 is claimed until that actual job passes and is reviewed.
+
+## 2026-10-31: native Glyph HIP preview accepted — stage 2
+
+Reviewed user-supplied `cinema-smoke(3).zip`. All 27 recorded Python source hashes
+match implementation commit `da15334b48029873ccb084650afc6a436d06c6b8`.
+This is external native execution evidence; no Blender binary is installed in the
+development container. Existing-output revalidation passes without changing it.
+
+| Check | Result |
+| --- | --- |
+| Blender | 5.2.3 LTS, build `e13b728c6880` |
+| Both camera reports | RX 9060 XT / HIP / Cycles GPU, CPU render device disabled, HIP RT enabled, 2 threads |
+| Native gates | `CINEMA_BLENDER_ACCEPTANCE_OK`, `CINEMA_GLYPH_ACCEPTANCE_OK`, `CINEMA_SMOKE_OK` all present |
+| Glyph geometry | Same immutable snapshot after both project save/reloads and exports; original seven `stroke001..007` / `s1..s7` links intact |
+| Native checks | Seven face-part indices, floor placement/depth, edited translation and rename, reimport, geometry-edit rejection, synthetic 2.88 m² hole cap all passed |
+| Images | Six decoded 1280×720 PNGs, frames 1/76/150 per camera; full letter, visible thickness and floor shadows in both views |
+| Framing | Extruded-outline AABB preflight passed |
+| Integrity | All 16 manifest entries matched byte lengths/SHA-256; both native-project hashes verified |
+| Elapsed | Blender script 49.23 s; host process 50.76 s |
+
+The six images are static by design: this is placement/geometry acceptance, not
+walking or an animated performance. Empty `videos` is expected for preview mode.
+Stage 2's read-only actual-Glyph shape, identity and placement roundtrip is accepted.
+This does not establish actor rotation, per-part motion, collision, walking,
+recovery, arbitrary outline support, Windows native Blender rendering, or a remote
+MCP/Flamenco render pipeline. Those remain separate integration/acting work.
