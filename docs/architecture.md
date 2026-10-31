@@ -4,14 +4,16 @@
 
 Cinema is a renderer-independent scene/performance library. It can run on Linux
 and Windows without Blender. No service is started by importing or installing it.
-The current implementation uses only Python's standard library at runtime.
+Core/prepared-take consumption uses only Python's standard library. Optional
+Glyph preparation reuses Glyph, fontTools and PathOps; none is required inside
+Blender. See [Glyph actors](glyph-actors.md).
 
 | Component | Authority | Current connection |
 | --- | --- | --- |
-| Glyph | Letterform geometry, occurrence identity, style/provenance | Planned read-only actor adapter, not implemented |
+| Glyph | Letterform geometry, occurrence identity, style/provenance | Read-only bundle adapter implemented; native actor acceptance pending |
 | Cinema contracts | Scene entities, clock, limits and sampled performance | Implemented Python validators and take bundles |
 | Cinema simulation | Reference sphere/floor trajectory | Implemented 120 Hz gravity, normal restitution, linear velocity |
-| Blender adapter | Mapping portable subset into/from native projects | Source implemented; live acceptance pending |
+| Blender adapter | Mapping portable subset into/from native projects | Sphere CPU/HIP/full sequence accepted; Glyph native gate pending |
 | Blender | Native scene editing and offline rendering | Optional local process; install handled separately |
 | Kachinco | Clips, audio, editorial timing, compositing, final export | Planned PNG/media handoff; no project mutation implemented |
 | AI director | Bounded scene/take proposals | Future client of the same validators, no execution service yet |
@@ -43,8 +45,8 @@ character performance, the first short and later AI direction are tracked there.
 ### Immediate engineering slices, in order
 
 1. **Real Blender acceptance:** run the included roundtrip test and inspect the
-   two-camera CPU render. Record Blender version and results before claiming a
-   supported deployment. GPU setup belongs to the separate runtime workflow.
+   two-camera render. CPU/HIP previews and the full HIP sequence are accepted;
+   see acceptance.md. GPU setup belongs to the separate runtime workflow.
 2. **Glyph 2.5D actor:** inspect the actual Glyph bundle contract; preserve source
    checksum, occurrence/stroke IDs, holes and fill rules. Specify pixel-to-metre
    conversion, origin/pivot, read-only asset roots and collision proxy separately
@@ -61,7 +63,7 @@ character performance, the first short and later AI direction are tracked there.
    and revision selection. No raw remote Blender Python or autonomous installation.
 
 The prototype is not yet the walk → trip → fall → recover film. Sphere/floor
-contact is implemented; letter geometry, obstacle collision and character acting
-remain separate work. Track the larger milestone in
+contact is accepted. Letter geometry import is implemented with native acceptance
+pending; obstacle collision and character acting remain future work. Track this in
 [Kachinco #124](https://github.com/flamoris-jp/flamoris-kachinco/issues/124)
 and the Glyph boundary in [Glyph #3](https://github.com/flamoris-jp/flamoris-glyph/issues/3).

@@ -37,4 +37,5 @@ dist/
 *.blend[0-9]*
 *.anim.json
 *.take.json
+!examples/red_glyph.take.json
 renders/

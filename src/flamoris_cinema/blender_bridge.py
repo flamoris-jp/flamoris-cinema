@@ -23,6 +23,9 @@ KIND = "cinema_kind"
 def _mesh_digest(obj):
     mesh = obj.data
     content = [[list(v.co) for v in mesh.vertices], [list(p.vertices) for p in mesh.polygons]]
+    if 'cinema_part' in mesh.attributes:
+        attr = mesh.attributes['cinema_part']
+        content.append([attr.domain, attr.data_type, [v.value for v in attr.data]])
     return hashlib.sha256(json.dumps(content, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -132,8 +135,12 @@ def build_scene(scene, animation, camera=None):
     target.render.threads_mode, target.render.threads = "FIXED", 2
     objects = {}
     for actor in scene["actors"]:
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=actor["radius"])
-        obj = bpy.context.object
+        if scene['schema_version'] == 2:
+            from .glyph_blender import build_glyph_mesh
+            obj = build_glyph_mesh(target, actor)
+        else:
+            bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=actor["radius"])
+            obj = bpy.context.object
         obj.name = actor["id"]
         obj.location = actor["position"]
         mat = bpy.data.materials.new(actor["id"] + "_color")
@@ -211,7 +218,7 @@ def export_take():
             errors.append(f"{name}: object type changed")
             continue
         if obj.type == "MESH" and (_mesh_digest(obj) != obj.get("cinema_mesh") or obj.data.shape_keys):
-            errors.append(f"{name}: geometry edited; v1 supports sphere proxies only")
+            errors.append(f"{name}: geometry edited; portable actor geometry is immutable")
         if kind != "actor" and (obj.animation_data or getattr(obj.data, "animation_data", None)):
             errors.append(f"{name}: only actor translation animation is supported")
         if kind in ("camera", "light") and (obj.scale - Vector((1, 1, 1))).length > 1e-6:
@@ -238,6 +245,10 @@ def export_take():
         target.frame_set(1)
         for actor in scene["actors"]:
             obj = objects[actor["id"]]
+            if scene['schema_version'] == 2:
+                from .glyph_blender import part_metadata
+                if obj.get('cinema_parts') != json.dumps(part_metadata(actor['geometry']['asset']), ensure_ascii=False, sort_keys=True):
+                    raise ValueError('Glyph part identity changed')
             materials = obj.data.materials
             if len(materials) != 1 or materials[0] is None:
                 raise ValueError(f"{actor['id']}: exactly one RGB material is required")
@@ -279,7 +290,7 @@ def export_take():
         # The original simulation initial conditions remain intact. The returned
         # animation is authoritative; simulate(scene) explicitly creates a NEW take.
         scene["render"] = {"width": target.render.resolution_x, "height": target.render.resolution_y}
-        animation = {"schema_version": 1, "fps": scene["fps"], "motion_id": motion_id(scene), "frames": frames}
+        animation = {"schema_version": scene['schema_version'], "fps": scene["fps"], "motion_id": motion_id(scene), "frames": frames}
         return make_take(scene, animation)
     finally:
         target.frame_set(saved_frame, subframe=saved_subframe)

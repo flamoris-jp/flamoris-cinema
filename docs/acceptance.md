@@ -1,5 +1,9 @@
 # Blender acceptance evidence
 
+**Latest status:** stage 1's full two-camera HIP sphere sequence is accepted (see
+the final section). Earlier pending statements below describe historical runs.
+Glyph stage 2 source implementation is present; native acceptance is pending.
+
 ## 2026-10-31: Blender 5.2.3 CPU preview
 
 **Accepted scope:** the fixed two-camera CPU preview and the edited-subset roundtrip.
@@ -120,3 +124,36 @@ or guaranteed thermal benefit is established by the short preview.
 The corrected close framing and CPU/HIP subset connections now pass preview
 acceptance. A complete five-second movie, continuous motion and sustained-load
 measurements remain pending. `videos: {}` is expected for preview mode.
+
+## 2026-10-31: full HIP sphere sequence accepted — stage 1
+
+Reviewed the user-supplied `cinema-smoke(2).zip` from the fixed full/encode job.
+Its recorded source hashes match the accepted HIP implementation. This is external
+execution evidence, not a Blender run in the development container.
+
+| Check | Result |
+| --- | --- |
+| Blender | 5.2.3 LTS, build `e13b728c6880` |
+| Both camera device reports | RX 9060 XT, HIP/Cycles GPU, CPU rendering disabled, HIP RT on, two threads |
+| PNG sequences | Exact frames 1..150 per camera; all 300 PNGs decoded as 1280×720 |
+| Videos | Both H.264 MP4s: 1280×720, 30 fps, 150 frames, exactly 5.000 seconds; full decode passed |
+| Native save/reopen, edited subset, sampled-motion comparison | Passed in the recorded Blender job; unchanged-output checker passed during review |
+| Integrity | All 314 manifest entries matched byte lengths and SHA-256; native hashes verified |
+| Framing | Whole-sphere preflight passed; sampled visual inspection shows complete sphere in both camera views |
+| Elapsed | Blender script 2373.46 s; host process 2377.58 s (about 39 min 38 s) |
+
+Samples show the same red sphere dropping, bouncing and moving horizontally from
+wide/close perspectives. These are silent geometric prototype clips, not the
+walking Glyph film. Stage 1's two-camera five-second render and subset roundtrip
+gate is met. User-requested performance investigation is deferred; no speedup,
+bottleneck or run-wide thermal maximum is inferred from elapsed time.
+
+## Glyph stage 2 preparation — native execution pending
+
+The actual authored 赤 is snapshotted read-only from pinned Glyph source, retaining
+seven stroke IDs, occurrence/cue/variant/source hashes and license provenance.
+Portable v2 placement, nonzero normalization, framing and input-integrity checks
+pass locally. `--glyph` adds a native identity/placement/save-reload gate and a
+synthetic hole-area check before two-camera stills. The development container
+has no Blender; the two native integration tests are skipped. No Glyph native
+success or completed stage 2 is claimed until that actual job passes and is reviewed.

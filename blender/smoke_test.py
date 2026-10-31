@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--full', action='store_true')
+    parser.add_argument('--glyph', action='store_true', help='fixed static Glyph stage instead of sphere simulation')
     parser.add_argument('--device', choices=('CPU', 'HIP'), default='CPU')
     parser.add_argument('--gpu-name')
     parser.add_argument('--threads', type=int, default=2)
@@ -30,9 +31,15 @@ def main():
     started = time.monotonic()
     # Includes edited RGB/translation, identity after rename and negative cases.
     runpy.run_path(str(ROOT / 'tests/blender_acceptance.py'), run_name='__main__')
+    if args.glyph:
+        runpy.run_path(str(ROOT / 'tests/blender_glyph_acceptance.py'), run_name='__main__')
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    scene = read_json(ROOT / 'examples/red_falls.scene.json')
-    animation = simulate(scene)
+    if args.glyph:
+        take = read_json(ROOT / 'examples/red_glyph.take.json')
+        scene, animation = take['scene'], take['animation']
+    else:
+        scene = read_json(ROOT / 'examples/red_falls.scene.json')
+        animation = simulate(scene)
     framing = check_framing(scene, animation)
     write_json(args.out / 'framing.json', framing)
     if not framing['passed']:
@@ -57,6 +64,8 @@ def main():
             for name, position in original['positions'].items():
                 if any(not math.isclose(a, b, abs_tol=1e-5, rel_tol=0) for a, b in zip(position, restored['positions'][name])):
                     raise ValueError('saved Blender project changed sampled motion')
+        if args.glyph and returned['scene']['actors'][0]['geometry'] != scene['actors'][0]['geometry']:
+            raise ValueError('Glyph snapshot changed during native roundtrip')
         write_json(folder / 'returned.take.json', returned)
         target = bpy.context.scene
         target.render.image_settings.file_format = 'PNG'
@@ -73,6 +82,8 @@ def main():
         'device': args.device, 'render_devices': device_reports, 'mode': 'full' if args.full else 'preview',
         'frames_per_camera': frames, 'width': scene['render']['width'], 'height': scene['render']['height'],
         'project_sha256': project_hashes,
+        'subject': 'glyph' if args.glyph else 'sphere',
+        'glyph_acceptance': 'passed' if args.glyph else None,
         'framing': 'passed',
         'roundtrip': 'passed', 'edited_subset_acceptance': 'passed',
         'elapsed_seconds': time.monotonic() - started,

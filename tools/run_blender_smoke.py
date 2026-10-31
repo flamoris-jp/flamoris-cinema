@@ -42,13 +42,15 @@ def native_project_container(path):
     raise ValueError('unrecognized native Blender project container')
 
 
-def validate_outputs(folder, full=False, device=None):
+def validate_outputs(folder, full=False, device=None, glyph=False):
     result = read_json(folder / 'result.json')
     if (result.get('success') is not True or result.get('roundtrip') != 'passed' or
             result.get('edited_subset_acceptance') != 'passed' or result.get('device') not in ('CPU', 'HIP')):
         raise ValueError('Blender did not report successful acceptance')
     if device is not None and result.get('device') != device:
         raise ValueError('reported render device differs from the requested device')
+    if glyph and (result.get('subject') != 'glyph' or result.get('glyph_acceptance') != 'passed'):
+        raise ValueError('Glyph acceptance result missing')
     if result.get('device') == 'HIP':
         reports = result.get('render_devices', {})
         for camera in ('wide', 'close'):
@@ -68,7 +70,12 @@ def validate_outputs(folder, full=False, device=None):
             raise ValueError('whole-sphere framing preflight did not pass')
     for camera in ('wide', 'close'):
         root = folder / camera
-        validate_take(read_json(root / 'returned.take.json'))
+        take = validate_take(read_json(root / 'returned.take.json'))
+        if glyph:
+            source = validate_take(read_json(ROOT / 'examples/red_glyph.take.json'))
+            if (take['scene']['actors'][0]['geometry'] != source['scene']['actors'][0]['geometry'] or
+                    len(take['scene']['actors']) != 1 or take['scene']['actors'][0]['id'] != 'red_glyph'):
+                raise ValueError('returned Glyph differs from the fixed source snapshot')
         native_project_container(root / 'scene.blend')
         project_hashes = result.get('project_sha256')
         if project_hashes is not None:
@@ -126,7 +133,7 @@ def encode_videos(folder, encoder, probe):
     return outputs
 
 
-def run(blender, folder, full=False, timeout=900, encode=False, device='CPU', gpu_name=None, threads=2):
+def run(blender, folder, full=False, timeout=900, encode=False, device='CPU', gpu_name=None, threads=2, glyph=False):
     validate_options(device, gpu_name, threads)
     executable = shutil.which(str(blender))
     if executable is None:
@@ -146,6 +153,8 @@ def run(blender, folder, full=False, timeout=900, encode=False, device='CPU', gp
         command.extend(['--gpu-name', gpu_name])
     if full:
         command.append('--full')
+    if glyph:
+        command.append('--glyph')
     started = time.monotonic()
     receipt = {'success': False, 'command': command, 'mode': 'full' if full else 'preview',
                'requested_device': device, 'threads': threads}
@@ -158,7 +167,7 @@ def run(blender, folder, full=False, timeout=900, encode=False, device='CPU', gp
             process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=timeout, check=False, env=environment)
         if process.returncode != 0:
             raise ValueError(f'Blender exited with code {process.returncode}; inspect blender.log')
-        result = validate_outputs(folder, full, device)
+        result = validate_outputs(folder, full, device, glyph)
         receipt['blender_result'] = result
         if encode:
             receipt['videos'] = encode_videos(folder, encoder, probe)
@@ -191,6 +200,7 @@ def main(argv=None):
     parser.add_argument('--gpu-name', help='unique HIP GPU name/id fragment')
     parser.add_argument('--threads', type=int, default=2, help='render/helper thread setting, 1..64; default 2')
     parser.add_argument('--full', action='store_true', help='render 150 frames per camera; default is 3 previews per camera')
+    parser.add_argument('--glyph', action='store_true', help='use the fixed static Glyph stage and Glyph native acceptance')
     parser.add_argument('--encode', action='store_true', help='with --full, make and verify two 5-second MP4s using ffmpeg/ffprobe')
     parser.add_argument('--timeout', type=int, default=900, help='process timeout seconds (1..7200)')
     args = parser.parse_args(argv)
@@ -201,11 +211,12 @@ def main(argv=None):
     try:
         if args.check_only:
             result = read_json(args.out / 'result.json')
-            result = validate_outputs(args.out, full=result.get('mode') == 'full')
+            result = validate_outputs(args.out, full=result.get('mode') == 'full', device=args.device if args.device != 'CPU' else None,
+                                      glyph=args.glyph or result.get('subject') == 'glyph')
             print(json.dumps({'success': True, 'check_only': True, 'output': str(args.out.resolve()),
                               'blender_result': result}, ensure_ascii=False))
             return 0
-        receipt = run(args.blender, args.out, args.full, args.timeout, args.encode, args.device, args.gpu_name, args.threads)
+        receipt = run(args.blender, args.out, args.full, args.timeout, args.encode, args.device, args.gpu_name, args.threads, args.glyph)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps({'success': receipt['success'], 'output': str(args.out.resolve()),

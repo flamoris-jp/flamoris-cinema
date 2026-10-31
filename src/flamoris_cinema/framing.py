@@ -1,8 +1,9 @@
-"""Conservative whole-sphere framing for static Z-up perspective cameras.
+"""Conservative sphere/Glyph-AABB framing for static Z-up perspective cameras.
 
 This is geometric preflight, not a visibility/occlusion or final-image test.
 """
 import math
+from itertools import product
 from .contracts import validate_animation
 
 
@@ -45,8 +46,17 @@ def check_framing(scene, animation, margin=0.05):
             for actor in scene['actors']:
                 delta = [p - c for p, c in zip(sample['positions'][actor['id']], camera['position'])]
                 depth = _dot(delta, forward)
-                radius = actor['radius']
-                clearance = min((depth * horizontal - abs(_dot(delta, right))) / math.sqrt(1 + horizontal ** 2) - radius,
+                if scene['schema_version'] == 2:
+                    from .glyph_asset import local_bounds
+                    low, high = local_bounds(actor['geometry'])
+                    corners = [[d + c for d, c in zip(delta, corner)]
+                               for corner in product(*zip(low, high))]
+                    clearance = min(min((_dot(p, forward) * horizontal - abs(_dot(p, right))) / math.sqrt(1+horizontal**2),
+                                        (_dot(p, forward) * vertical - abs(_dot(p, up))) / math.sqrt(1+vertical**2),
+                                        _dot(p, forward)-0.1, 1000-_dot(p, forward)) for p in corners)
+                else:
+                    radius = actor['radius']
+                    clearance = min((depth * horizontal - abs(_dot(delta, right))) / math.sqrt(1 + horizontal ** 2) - radius,
                                 (depth * vertical - abs(_dot(delta, up))) / math.sqrt(1 + vertical ** 2) - radius,
                                 depth - radius - 0.1, 1000 - depth - radius)
                 minimum = min(minimum, clearance)

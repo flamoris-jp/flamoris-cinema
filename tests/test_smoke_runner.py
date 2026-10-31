@@ -106,6 +106,15 @@ class SmokeRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'differs from the requested'):
                 runner.validate_outputs(folder, device='HIP')
 
+    def test_glyph_job_cannot_pass_with_sphere_acceptance_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            runner.write_json(folder / 'result.json', {
+                'success': True, 'roundtrip': 'passed', 'edited_subset_acceptance': 'passed',
+                'device': 'CPU', 'subject': 'sphere'})
+            with self.assertRaisesRegex(ValueError, 'Glyph acceptance'):
+                runner.validate_outputs(folder, glyph=True)
+
     def test_hip_result_requires_gpu_only_selection_evidence(self):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)

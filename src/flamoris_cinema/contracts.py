@@ -1,4 +1,4 @@
-"""Portable v1 contracts. No renderer imports or filesystem side effects."""
+"""Portable v1 sphere/v2 Glyph contracts, without filesystem or renderer effects."""
 import hashlib
 import json
 import math
@@ -43,7 +43,7 @@ def frame_count(scene):
 def validate_scene(scene):
     fields(scene, ("schema_version", "fps", "duration_seconds", "actors"),
            ("cameras", "lights", "render"), "scene")
-    if type(scene["schema_version"]) is not int or scene["schema_version"] != VERSION:
+    if type(scene["schema_version"]) is not int or scene["schema_version"] not in (1, 2):
         raise ValueError("unsupported scene schema")
     fps = scene["fps"]
     if type(fps) is not int or not 1 <= fps <= 120:
@@ -60,18 +60,31 @@ def validate_scene(scene):
         if not isinstance(items, list) or len(items) > limit:
             raise ValueError(f"invalid {kind} list")
         for item in items:
-            required = {"actor": ("id", "position", "radius", "color"),
+            glyph = kind == 'actor' and scene['schema_version'] == 2
+            required = {"actor": ("id", "position", "color", "geometry") if glyph else ("id", "position", "radius", "color"),
                         "camera": ("id", "position", "target", "fov_degrees"),
                         "light": ("id", "position", "color", "energy")}[kind]
-            fields(item, required, ("velocity", "restitution") if kind == "actor" else (), kind)
+            fields(item, required, ("velocity", "restitution") if kind == "actor" and not glyph else (), kind)
             identifier(item["id"], kind)
             if item["id"] in ids:
                 raise ValueError("duplicate id across scene objects")
             ids.add(item["id"])
             vector(item["position"], kind + ".position")
             if kind == "actor":
-                number(item["radius"], 0.0001, 100, "radius")
                 vector(item["color"], "color", 0, 1)
+                if glyph:
+                    from .glyph_asset import validate_asset, local_bounds
+                    geometry = item['geometry']
+                    fields(geometry, ('kind', 'asset', 'metres_per_unit', 'depth'), path='geometry')
+                    if geometry['kind'] != 'glyph':
+                        raise ValueError('scene v2 supports Glyph geometry only')
+                    number(geometry['metres_per_unit'], 0.000001, 0.1, 'metres_per_unit')
+                    number(geometry['depth'], 0.0001, 10, 'depth')
+                    validate_asset(geometry['asset'])
+                    if item['position'][2] + local_bounds(geometry)[0][2] < -1e-7:
+                        raise ValueError('Glyph starts below floor')
+                    continue
+                number(item["radius"], 0.0001, 100, "radius")
                 vector(item.get("velocity", [0, 0, 0]), "velocity", -100, 100)
                 number(item.get("restitution", 0), 0, 1, "restitution")
                 if item["position"][2] < item["radius"]:
@@ -95,6 +108,14 @@ def validate_scene(scene):
 def motion_id(scene):
     """Camera/light/color edits do not invalidate an existing performance."""
     validate_scene(scene)
+    if scene['schema_version'] == 2:
+        payload = {'schema_version': 2, 'fps': scene['fps'], 'duration_seconds': float(scene['duration_seconds']),
+                   'actors': sorted([{'id': a['id'], 'position': list(map(float, a['position'])),
+                                     'geometry': {'asset_sha256': a['geometry']['asset']['sha256'],
+                                                  'metres_per_unit': float(a['geometry']['metres_per_unit']),
+                                                  'depth': float(a['geometry']['depth'])}}
+                                    for a in scene['actors']], key=lambda a: a['id'])}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     payload = {"fps": scene["fps"], "duration_seconds": float(scene["duration_seconds"]),
                "actors": sorted([{"id": a["id"], "position": list(map(float, a["position"])),
                                   "radius": float(a["radius"]),
@@ -107,12 +128,14 @@ def motion_id(scene):
 def validate_animation(animation, scene):
     validate_scene(scene)
     fields(animation, ("schema_version", "fps", "frames"), ("motion_id",), "animation")
-    if type(animation["schema_version"]) is not int or animation["schema_version"] != VERSION:
+    if type(animation["schema_version"]) is not int or animation["schema_version"] != scene['schema_version']:
         raise ValueError("unsupported animation schema")
     if type(animation["fps"]) is not int or animation["fps"] != scene["fps"]:
         raise ValueError("animation fps differs from scene")
     if "motion_id" in animation and animation["motion_id"] != motion_id(scene):
         raise ValueError("animation belongs to a different performance")
+    if scene['schema_version'] == 2 and 'motion_id' not in animation:
+        raise ValueError('v2 animation requires motion_id')
     frames = animation["frames"]
     if not isinstance(frames, list) or len(frames) != frame_count(scene):
         raise ValueError("animation sample count differs from scene")

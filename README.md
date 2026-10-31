@@ -7,7 +7,10 @@ Glyphは文字の形、Cinemaは空間と演技、Blenderはネイティブ編�
 
 **Status: development prototype, 0.1.0.** Implemented: validated scene/take contracts,
 camera-independent sphere/floor simulation and Blender subset importer/exporter.
-Portable core tests pass locally; real Blender 5.2.3 CPU/HIP previews and subset roundtrips have passed. Full sequences and framing acceptance remain pending.
+Portable tests pass locally; Blender 5.2.3 CPU/HIP previews, subset roundtrips and
+two full five-second HIP camera sequences have passed. A read-only Glyph adapter,
+immutable 赤 fixture and v2 staging/Blender mapping are implemented; native Glyph
+acceptance remains pending. See [Glyph actors](docs/glyph-actors.md).
 This is not a full rigid-body engine, character animation system or AI film director.
 
 ## Identity and ownership
@@ -41,13 +44,16 @@ new. `--animation FILE --out NEW_FILE` reuses an existing sampled performance
 without simulation. `--validate-only` validates inputs without writing.
 
 The sample has a red **sphere proxy**, two cameras and two point lights; it is not
-yet the actual 赤 Glyph. Physics uses 120 Hz gravity, sphere/floor contact, normal
+yet the actual 赤 Glyph. A separate `examples/red_glyph.take.json` contains the
+actual authored Glyph as a static stage take; it is not a sphere simulation.
+Physics uses 120 Hz gravity, sphere/floor contact, normal
 restitution and constant horizontal velocity. No actor collisions, rotation,
 friction, obstacle trip, walking or recovery are implemented.
 
 ## Optional Blender workflow
 
-Target: Blender 5.2.3 LTS; minimum API version 4.5. CPU/HIP preview acceptance is recorded in [acceptance evidence](docs/acceptance.md); full sequences remain pending. Run from the checkout:
+Target: Blender 5.2.3 LTS; minimum API version 4.5. Sphere preview/full-sequence
+acceptance is recorded in [acceptance evidence](docs/acceptance.md). Run from the checkout:
 
 ```sh
 blender -b --python-exit-code 1 --python blender/import_scene.py -- examples/red_falls.scene.json red.anim.json red-wide.blend --camera wide
@@ -105,8 +111,8 @@ fragment. CPU and other render devices are disabled; missing/ambiguous GPUs fail
 instead of selecting CPU. Device selection is reapplied after native-file reload,
 checked before frames and recorded for each camera, including the effective HIP RT
 preference. Host validation rejects a CPU result when HIP was requested. A real HIP preview has passed; see [acceptance evidence](docs/acceptance.md).
-The measured end-to-end preview was slower than the original CPU run under different
-thread/framing conditions; isolated performance and sustained-load tests remain pending.
+The full five-second HIP sphere run has also passed. Performance research is
+deferred until an actual production need; preview timings are not a controlled benchmark.
 
 The default render/helper thread setting is now 2 (`--threads 1..64`), also passed
 to Blender and common CPU math-library environment settings. MP4 encoding uses two
@@ -115,6 +121,18 @@ scene preparation/driver compilation and encoding can still use CPU resources.
 No runtime/service is started or stopped and user preferences are not saved.
 After reviewing the short HIP preview and temperatures, add `--full --encode` in a
 NEW directory to render complete videos. No resumed-frame mixing is implemented.
+
+### Glyph stage preview (native acceptance pending)
+
+```sh
+python tools/run_blender_smoke.py --blender /path/to/blender --device HIP --gpu-name "RX 9060 XT" --threads 2 --glyph --out /path/to/new-glyph-preview
+```
+
+This uses the prepared, font-free actual 赤 fixture, runs Glyph-specific native
+checks and renders six stills from two cameras. It needs no Glyph/fontTools/PathOps
+installation in Blender. `--full` is unnecessary for this static stage. Geometry,
+unit conversion, IDs, source licensing and optional source preparation are documented
+in [Glyph actors](docs/glyph-actors.md). Walking/collision/recovery are later work.
 
 ## Development checks
 

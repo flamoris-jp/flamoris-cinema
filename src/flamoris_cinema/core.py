@@ -8,6 +8,8 @@ from .io import read_json, write_json
 def simulate(scene):
     """120 Hz semi-implicit Euler; linear interpolation to any integer output fps."""
     validate_scene(scene)
+    if scene['schema_version'] != 1:
+        raise ValueError('reference simulation supports v1 sphere actors only; supply a sampled Glyph take')
     states = {a["id"]: (list(map(float, a["position"])),
                          list(map(float, a.get("velocity", [0, 0, 0])))) for a in scene["actors"]}
     count = frame_count(scene)
