@@ -1,5 +1,7 @@
 # Cinema architecture and next implementation slices
 
+> **Historical implementation architecture / PAUSED 2026-10-31.** The contracts and bridges below describe the existing prototype and its then-proposed next steps, **not** the agreed future product architecture or an instruction to continue work. Current conceptual direction: [vision and pause](vision-and-pause.md). No active engineering slices are authorized while paused.
+
 ## Authority and dependency direction
 
 Cinema is a renderer-independent scene/performance library. It can run on Linux
@@ -42,7 +44,7 @@ The user-facing milestones and acceptance gates are authoritative in
 [the Cinema roadmap](roadmap.md). The list below expands engineering dependencies;
 character performance, the first short and later AI direction are tracked there.
 
-### Immediate engineering slices, in order
+### Historical proposed engineering slices (on hold)
 
 1. **Real Blender acceptance:** run the included roundtrip test and inspect the
    two-camera render. CPU/HIP previews and the full HIP sequence are accepted;
