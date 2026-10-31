@@ -4,6 +4,9 @@
 > **Vision:** 自然言語で伝えた「起こしたい出来事」を、AIが理解できるプロジェクト設計図に記述し、必要な制作ツールを選んで組み合わせるコントローラー。映画制作は応用例であり、唯一の目的ではありません。
 > [構想と休眠の判断](docs/vision-and-pause.md)を先に参照してください。既存の実験仕様はそのまま残しています。
 
+## Historical implementation / 停止前の試作基盤
+
+以下は2026-10-31時点で検証した実装を保存した説明です。新しい構想の実現済み機能ではありません。
 
 **Portable scene, sampled animation and cinematic rendering infrastructure for FLAMORIS.**
 
