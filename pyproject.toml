@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flamoris-cinema"
+version = "0.1.0"
+description = "Portable scene contract and Blender bridge for FLAMORIS Cinema"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+dependencies = []
+
+[project.optional-dependencies]
+glyph-prepare = ["fonttools>=4.61,<5", "skia-pathops>=0.9,<0.10"]
+
+[project.scripts]
+flamoris-cinema = "flamoris_cinema.core:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

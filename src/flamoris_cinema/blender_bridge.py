@@ -1,0 +1,413 @@
+"""Blender 4.5+ adapter. Importing this module does not require bpy.
+
+The round trip preserves sphere translations, flat RGB, static cameras and point
+lights. It is a sampled performance exchange, not a .blend serializer.
+"""
+import argparse
+from copy import deepcopy
+import hashlib
+import json
+import math
+from pathlib import Path
+import sys
+
+from .contracts import motion_id, validate_animation, validate_scene
+from .interchange import make_take, validate_take
+from .io import read_json, write_json
+from .articulation import part_tag
+
+META = "cinema_take_v1"
+TAG = "cinema_id"
+KIND = "cinema_kind"
+
+
+def _mesh_digest(obj):
+    mesh = obj.data
+    content = [[list(v.co) for v in mesh.vertices], [list(p.vertices) for p in mesh.polygons]]
+    if 'cinema_part' in mesh.attributes:
+        attr = mesh.attributes['cinema_part']
+        content.append([attr.domain, attr.data_type, [v.value for v in attr.data]])
+    return hashlib.sha256(json.dumps(content, separators=(",", ":")).encode()).hexdigest()
+
+
+def _mark(obj, kind, name):
+    obj[TAG], obj[KIND] = name, kind
+    if obj.type == "MESH":
+        obj["cinema_mesh"] = _mesh_digest(obj)
+
+
+def _simple_shader(tree, shader_type, output_type):
+    """Return one unlinked-input shader connected directly to one output."""
+    if tree is None or tree.animation_data or len(tree.nodes) != 2 or len(tree.links) != 1:
+        raise ValueError("only a static two-node Cinema shader is portable")
+    shaders = [n for n in tree.nodes if n.bl_idname == shader_type]
+    outputs = [n for n in tree.nodes if n.bl_idname == output_type]
+    if len(shaders) != 1 or len(outputs) != 1:
+        raise ValueError("unsupported shader nodes")
+    shader, output = shaders[0], outputs[0]
+    link = tree.links[0]
+    if (link.from_node != shader or link.from_socket != shader.outputs[0] or
+            link.to_node != output or link.to_socket != output.inputs['Surface'] or
+            any(socket.is_linked for socket in shader.inputs) or shader.mute or output.mute):
+        raise ValueError("unsupported shader links or muted nodes")
+    return shader
+
+
+def _make_material(material, color):
+    import bpy
+    # In 5.x use_nodes is deprecated and always True. Never use it as a
+    # discriminator or assume diffuse_color drives the rendered shader.
+    if bpy.app.version < (5, 0, 0):
+        material.use_nodes = True
+    tree = material.node_tree
+    if tree is None:
+        raise ValueError("Blender did not provide a material node tree")
+    tree.nodes.clear()
+    shader = tree.nodes.new('ShaderNodeBsdfDiffuse')
+    shader.name = 'CinemaDiffuse'
+    shader.inputs['Color'].default_value = (*color, 1.0)
+    shader.inputs['Roughness'].default_value = 0.0
+    output = tree.nodes.new('ShaderNodeOutputMaterial')
+    tree.links.new(shader.outputs[0], output.inputs['Surface'])
+    material.diffuse_color = (*color, 1.0)
+
+
+def _material_color(material):
+    if material.animation_data:
+        raise ValueError("animated materials are outside v1")
+    if material.node_tree is None:
+        color = material.diffuse_color  # legacy 4.5 non-node projects
+    else:
+        shader = _simple_shader(material.node_tree, 'ShaderNodeBsdfDiffuse', 'ShaderNodeOutputMaterial')
+        if abs(shader.inputs['Roughness'].default_value) > 1e-6:
+            raise ValueError("nonzero diffuse roughness is outside v1")
+        color = shader.inputs['Color'].default_value
+    if abs(color[3] - 1) > 1e-6:
+        raise ValueError("transparent materials are outside v1")
+    return list(color[:3])
+
+
+def _neutral_light_nodes(data):
+    # 5.2 applies base light settings on top of the node output. Keep that
+    # output neutral: data.color and data.energy remain the portable values.
+    if data.node_tree is not None:
+        tree = data.node_tree
+        tree.nodes.clear()
+        shader = tree.nodes.new('ShaderNodeEmission')
+        shader.inputs['Color'].default_value = (1, 1, 1, 1)
+        shader.inputs['Strength'].default_value = 1.0
+        output = tree.nodes.new('ShaderNodeOutputLight')
+        tree.links.new(shader.outputs[0], output.inputs['Surface'])
+
+
+def _validate_light_nodes(data):
+    if data.node_tree is not None:
+        shader = _simple_shader(data.node_tree, 'ShaderNodeEmission', 'ShaderNodeOutputLight')
+        if (any(abs(v - 1) > 1e-6 for v in shader.inputs['Color'].default_value) or
+                abs(shader.inputs['Strength'].default_value - 1) > 1e-6):
+            raise ValueError("light shader must remain neutral; edit light Color/Power")
+    if abs(getattr(data, 'exposure', 0)) > 1e-6 or getattr(data, 'use_temperature', False):
+        raise ValueError("light exposure and temperature are outside v1")
+
+
+def build_scene(scene, animation, camera=None):
+    """Build in a NEW Blender scene. Existing scenes/objects are retained."""
+    import bpy
+    from mathutils import Vector
+
+    if bpy.app.version < (4, 5, 0):
+        raise ValueError("Blender 4.5 or newer is required")
+    validate_animation(animation, scene)
+    cameras = scene.get("cameras", [])
+    if camera is not None and camera not in {c["id"] for c in cameras}:
+        raise ValueError("unknown camera id")
+    target = bpy.data.scenes.new("Cinema")
+    bpy.context.window.scene = target
+    target.render.fps = scene["fps"]
+    target.render.fps_base = 1.0
+    target.frame_start, target.frame_end = 1, len(animation["frames"])
+    size = scene.get("render", {"width": 1280, "height": 720})
+    target.render.resolution_x, target.render.resolution_y = size["width"], size["height"]
+    target.render.resolution_percentage = 100
+    target.render.pixel_aspect_x = target.render.pixel_aspect_y = 1.0
+    target.render.use_motion_blur = False
+    target.render.engine = "CYCLES"
+    target.cycles.device, target.cycles.samples = "CPU", 16
+    target.render.threads_mode, target.render.threads = "FIXED", 2
+    objects = {}
+    for actor in scene["actors"]:
+        mat = bpy.data.materials.new(actor['id'] + '_color')
+        _make_material(mat,actor['color'])
+        if scene['schema_version'] == 3:
+            from .glyph_blender import build_glyph_mesh, part_metadata
+            obj = bpy.data.objects.new(actor['id'],None)
+            target.collection.objects.link(obj)
+            obj['cinema_parts'] = json.dumps(part_metadata(actor['geometry']['asset']),ensure_ascii=False,sort_keys=True)
+            for pid,pivot in actor['pivots'].items():
+                part = build_glyph_mesh(target,actor,pid)
+                part.name = part_tag(actor['id'],pid)
+                for vertex in part.data.vertices:
+                    vertex.co -= Vector(pivot)
+                part.data.update()
+                part.parent = obj
+                part.location = pivot
+                part.data.materials.append(mat)
+                _mark(part,'glyph_part',part_tag(actor['id'],pid))
+                objects[part_tag(actor['id'],pid)] = part
+        elif scene['schema_version'] == 2:
+            from .glyph_blender import build_glyph_mesh
+            obj = build_glyph_mesh(target, actor)
+        else:
+            bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=actor["radius"])
+            obj = bpy.context.object
+        obj.name = actor["id"]
+        obj.location = actor["position"]
+        if scene['schema_version'] != 3:
+            obj.data.materials.append(mat)
+        _mark(obj, "actor", actor["id"])
+        objects[actor["id"]] = obj
+    for sample in animation["frames"]:
+        for name, position in sample["positions"].items():
+            obj = objects[name]
+            obj.location = position
+            obj.keyframe_insert(data_path="location", frame=sample["frame"] + 1)
+        if scene['schema_version'] == 3:
+            for actor in scene['actors']:
+                for pid,pose in sample['parts'][actor['id']].items():
+                    obj = objects[part_tag(actor['id'],pid)]
+                    obj.location = [p+t for p,t in zip(actor['pivots'][pid],pose['translation'])]
+                    obj.rotation_euler = (0,math.radians(pose['angle_degrees']),0)
+                    obj.keyframe_insert(data_path='location',frame=sample['frame']+1)
+                    obj.keyframe_insert(data_path='rotation_euler',frame=sample['frame']+1)
+    # Every integer frame is keyed. Subframe interpolation is Blender-owned and
+    # deliberately outside the portable contract (motion blur is disabled).
+    for spec in cameras:
+        data = bpy.data.cameras.new(spec["id"])
+        data.type, data.sensor_fit = "PERSP", "HORIZONTAL"
+        data.clip_start, data.clip_end = 0.1, 1000.0
+        data.angle = math.radians(spec["fov_degrees"])
+        obj = bpy.data.objects.new(spec["id"], data)
+        target.collection.objects.link(obj)
+        obj.location = spec["position"]
+        direction = Vector(spec["target"]) - obj.location
+        obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+        obj["cinema_target_distance"] = direction.length
+        _mark(obj, "camera", spec["id"])
+        if camera == spec["id"] or (camera is None and target.camera is None):
+            target.camera = obj
+    for spec in scene.get("lights", []):
+        data = bpy.data.lights.new(spec["id"], "POINT")
+        data.energy, data.color = spec["energy"], spec["color"]
+        _neutral_light_nodes(data)
+        obj = bpy.data.objects.new(spec["id"], data)
+        target.collection.objects.link(obj)
+        obj.location = spec["position"]
+        _mark(obj, "light", spec["id"])
+    bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0, -0.1))
+    floor = bpy.context.object
+    floor.name, floor.scale = "Cinema floor", (10, 10, 0.1)
+    _mark(floor, "floor", "__floor__")
+    target[META] = json.dumps(make_take(scene, animation), allow_nan=False)
+    target.frame_set(1)
+    return target
+
+
+def export_take():
+    """Sample edited translations; reject topology/identity/rig changes.
+
+    Cosmetic Blender settings remain in .blend; see the supported-subset table.
+    Export never re-simulates physics or overwrites the .blend.
+    """
+    import bpy
+    from mathutils import Vector
+
+    target = bpy.context.scene
+    if META not in target:
+        raise ValueError("scene was not created by the Cinema bridge")
+    original = validate_take(json.loads(target[META]))
+    scene = deepcopy(original["scene"])
+    expected = {a["id"]: "actor" for a in scene["actors"]}
+    part_parents = {}
+    if scene['schema_version'] == 3:
+        for actor in scene['actors']:
+            for pid in actor['pivots']:
+                tag = part_tag(actor['id'],pid)
+                expected[tag] = 'glyph_part'
+                part_parents[tag] = actor['id']
+    expected.update({c["id"]: "camera" for c in scene.get("cameras", [])})
+    expected.update({c["id"]: "light" for c in scene.get("lights", [])})
+    expected["__floor__"] = "floor"
+    objects, errors = {}, []
+    for obj in target.objects:
+        name, kind = obj.get(TAG), obj.get(KIND)
+        if name not in expected or expected.get(name) != kind or name in objects:
+            errors.append(f"{obj.name}: missing/duplicate/unknown Cinema identity")
+            continue
+        objects[name] = obj
+        allowed_parent = kind == 'glyph_part' and obj.parent is not None and obj.parent.get(TAG) == part_parents[name]
+        if ((obj.parent is not None and not allowed_parent) or (kind == 'glyph_part' and not allowed_parent) or
+                obj.constraints or obj.modifiers or obj.rigid_body or obj.rigid_body_constraint):
+            errors.append(f"{name}: parent, constraint, modifier or rigid body is outside v1")
+        expected_type = {'actor':'EMPTY' if scene['schema_version']==3 else 'MESH',
+                         'glyph_part':'MESH','floor':'MESH','camera':'CAMERA','light':'LIGHT'}[kind]
+        if obj.type != expected_type:
+            errors.append(f"{name}: object type changed")
+            continue
+        if obj.type == "MESH" and (_mesh_digest(obj) != obj.get("cinema_mesh") or obj.data.shape_keys):
+            errors.append(f"{name}: geometry edited; portable actor geometry is immutable")
+        if obj.type == 'MESH' and obj.data.animation_data:
+            errors.append(f'{name}: animated mesh data is outside the geometry contract')
+        if kind not in ('actor','glyph_part') and (obj.animation_data or getattr(obj.data, "animation_data", None)):
+            errors.append(f"{name}: only actor translation animation is supported")
+        if kind in ("camera", "light") and (obj.scale - Vector((1, 1, 1))).length > 1e-6:
+            errors.append(f"{name}: camera/light scale is outside v1")
+        if kind in ('actor','glyph_part') and obj.rotation_mode != "XYZ":
+            errors.append(f"{name}: only XYZ rotation mode is supported")
+        if kind == "camera" and obj.rotation_mode != "XYZ":
+            errors.append(f"{name}: only XYZ camera rotation mode is supported")
+        if obj.hide_render:
+            errors.append(f"{name}: hidden render objects cannot be represented")
+    if set(objects) != set(expected):
+        errors.append("Cinema objects were added, removed or retagged")
+    if scene['schema_version'] == 3:
+        from mathutils import Matrix
+        for tag,parent_id in part_parents.items():
+            obj = objects.get(tag)
+            if obj is not None and (obj.parent != objects.get(parent_id) or
+                    any(abs(obj.matrix_parent_inverse[i][j]-Matrix.Identity(4)[i][j])>1e-6 for i in range(4) for j in range(4))):
+                errors.append('Glyph part hierarchy or parent inverse changed')
+    count = len(original["animation"]["frames"])
+    if (target.frame_start, target.frame_end) != (1, count):
+        errors.append("frame range changed; v1 keeps the original take duration")
+    if target.render.fps != scene["fps"] or abs(target.render.fps_base - 1) > 1e-7:
+        errors.append("fps changed; v1 keeps the original sample clock")
+    if target.render.resolution_percentage != 100 or abs(target.render.pixel_aspect_x - target.render.pixel_aspect_y) > 1e-7:
+        errors.append("only 100% resolution and square pixels are portable")
+    if errors:
+        raise ValueError("unsupported Blender edits:\n" + "\n".join(errors))
+    saved_frame, saved_subframe = target.frame_current, target.frame_subframe
+    try:
+        target.frame_set(1)
+        for actor in scene["actors"]:
+            obj = objects[actor["id"]]
+            if scene['schema_version'] in (2,3):
+                from .glyph_blender import part_metadata
+                if obj.get('cinema_parts') != json.dumps(part_metadata(actor['geometry']['asset']), ensure_ascii=False, sort_keys=True):
+                    raise ValueError('Glyph part identity changed')
+            meshes = [objects[part_tag(actor['id'],pid)] for pid in actor['pivots']] if scene['schema_version']==3 else [obj]
+            colors = []
+            for mesh_obj in meshes:
+                materials = mesh_obj.data.materials
+                if len(materials) != 1 or materials[0] is None:
+                    raise ValueError(f"{actor['id']}: exactly one RGB material is required")
+                colors.append(_material_color(materials[0]))
+            if any(any(abs(a-b)>1e-6 for a,b in zip(colors[0],color)) for color in colors[1:]):
+                raise ValueError('Glyph part colors must remain shared')
+            actor['color'] = colors[0]
+        floor = objects["__floor__"]
+        if ((floor.location - Vector((0, 0, -0.1))).length > 1e-6 or
+                (floor.scale - Vector((10, 10, 0.1))).length > 1e-6 or
+                floor.rotation_euler.to_quaternion().angle > 1e-6):
+            raise ValueError("floor transform changed; portable floor is fixed at z=0")
+        for spec in scene.get("cameras", []):
+            obj = objects[spec["id"]]
+            if obj.data.type != "PERSP" or obj.data.sensor_fit != "HORIZONTAL" or obj.data.dof.use_dof:
+                raise ValueError("only horizontal perspective cameras without DOF are portable")
+            if abs(obj.data.shift_x) > 1e-6 or abs(obj.data.shift_y) > 1e-6:
+                raise ValueError("camera lens shift is outside v1")
+            direction = obj.rotation_euler.to_quaternion() @ Vector((0, 0, -1))
+            rotation = direction.to_track_quat("-Z", "Y")
+            if rotation.rotation_difference(obj.rotation_euler.to_quaternion()).angle > 1e-5:
+                raise ValueError("camera roll is outside v1")
+            spec["position"] = list(obj.location)
+            spec["target"] = list(obj.location + direction * obj["cinema_target_distance"])
+            spec["fov_degrees"] = math.degrees(obj.data.angle)
+        for spec in scene.get("lights", []):
+            obj = objects[spec["id"]]
+            if obj.data.type != "POINT":
+                raise ValueError("only point lights are portable")
+            _validate_light_nodes(obj.data)
+            spec.update(position=list(obj.location), color=list(obj.data.color), energy=obj.data.energy)
+        frames = []
+        for index in range(count):
+            target.frame_set(index + 1)
+            positions = {}
+            parts = {}
+            for actor in scene["actors"]:
+                obj = objects[actor["id"]]
+                if (obj.scale - Vector((1, 1, 1))).length > 1e-6 or obj.rotation_euler.to_quaternion().angle > 1e-6:
+                    raise ValueError(f"{actor['id']}: actor rotation/scale is outside v1")
+                if scene['schema_version'] == 3 and (obj.delta_location.length>1e-6 or
+                        obj.delta_rotation_euler.to_quaternion().angle>1e-6 or (obj.delta_scale-Vector((1,1,1))).length>1e-6):
+                    raise ValueError('root delta transforms are outside the part-pose contract')
+                positions[actor["id"]] = list(obj.location)
+                if scene['schema_version'] == 3:
+                    parts[actor['id']] = {}
+                    for pid,pivot in actor['pivots'].items():
+                        part = objects[part_tag(actor['id'],pid)]
+                        if ((part.scale-Vector((1,1,1))).length>1e-6 or abs(part.rotation_euler.x)>1e-6 or abs(part.rotation_euler.z)>1e-6 or
+                                part.delta_location.length>1e-6 or part.delta_rotation_euler.to_quaternion().angle>1e-6 or
+                                (part.delta_scale-Vector((1,1,1))).length>1e-6):
+                            raise ValueError('part scale, delta transform or rotation outside local Y is not portable')
+                        parts[actor['id']][pid] = {'translation':[p-v for p,v in zip(part.location,pivot)],
+                                                 'angle_degrees':math.degrees(part.rotation_euler.y)}
+            frames.append({'frame':index,'positions':positions,**({'parts':parts} if scene['schema_version']==3 else {})})
+        # The original simulation initial conditions remain intact. The returned
+        # animation is authoritative; simulate(scene) explicitly creates a NEW take.
+        scene["render"] = {"width": target.render.resolution_x, "height": target.render.resolution_y}
+        animation = {"schema_version": scene['schema_version'], "fps": scene["fps"], "motion_id": motion_id(scene), "frames": frames}
+        return make_take(scene, animation)
+    finally:
+        target.frame_set(saved_frame, subframe=saved_subframe)
+
+
+def import_main(argv=None):
+    import bpy
+    parser = argparse.ArgumentParser(description="Import Cinema scene/motion or a portable take into Blender")
+    parser.add_argument("inputs", type=Path, nargs="+", help="scene.json animation.json output.blend OR take.json output.blend")
+    parser.add_argument("--camera")
+    parser.add_argument("--device", choices=("CPU", "HIP"), default="CPU")
+    parser.add_argument("--gpu-name")
+    parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument("--render-dir", type=Path, help="optional PNG sequence into a NEW directory")
+    args = parser.parse_args(argv)
+    try:
+        if len(args.inputs) == 3:
+            scene, animation = read_json(args.inputs[0]), read_json(args.inputs[1])
+        elif len(args.inputs) == 2:
+            take = validate_take(read_json(args.inputs[0]))
+            scene, animation = take["scene"], take["animation"]
+        else:
+            raise ValueError("expected two or three paths")
+        output = args.inputs[-1].resolve()
+        if output.suffix.lower() != ".blend" or output.exists():
+            raise ValueError("output must be a new .blend path")
+        if args.render_dir and args.render_dir.exists():
+            raise ValueError("render directory already exists")
+        from .render_device import configure_cycles
+        target = build_scene(scene, animation, args.camera)
+        configure_cycles(target, args.device, args.gpu_name, args.threads)
+        if args.render_dir and not target.camera:
+            raise ValueError("rendering requires a scene camera")
+        bpy.ops.wm.save_as_mainfile(filepath=str(output))
+        if args.render_dir:
+            args.render_dir.mkdir(parents=True, exist_ok=False)
+            target.render.image_settings.file_format = "PNG"
+            target.render.filepath = str(args.render_dir.resolve() / "frame_")
+            bpy.ops.render.render(animation=True)
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+
+
+def export_main(argv=None):
+    parser = argparse.ArgumentParser(description="Export current Blender Cinema scene as a new portable take")
+    parser.add_argument("output", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        write_json(args.output, export_take())
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+
+
+def script_args():
+    return sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []

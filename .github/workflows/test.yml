@@ -1,0 +1,43 @@
+name: Cinema contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.12', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install .
+      - run: python -m unittest discover -s tests -v
+      - run: python -m flamoris_cinema.core examples/red_falls.scene.json --out red.anim.json
+      - run: python -m flamoris_cinema.core examples/red_falls.scene.json --animation red.anim.json --validate-only
+  glyph-preparation:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: flamoris-jp/flamoris-glyph
+          ref: d10909b88d109df9a11587449484112e285fdfdd
+          path: _glyph_source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ".[glyph-prepare]" ./_glyph_source
+      - run: python -m unittest discover -s tests -v
+        env:
+          GLYPH_SOURCE: _glyph_source
