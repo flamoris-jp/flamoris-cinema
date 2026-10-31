@@ -22,7 +22,7 @@ Blenderへの入出力コードがある。**ソース実装と実機検証は�
   段階2の実機HIPプレビュー・保存再読込・配置・部品ID・穴・往復も合格。
   追加で、4歩→停止の3秒演技を実装し、MCP経由の実機往復とFlamenco描画、Kachinco CLI取込・保存まで成功。
   物理的な転倒・起き上がり、人物、AI監督機能は未完了。
-- 開発コードはPR #1でレビュー中。インストール・サーバー反映は別の作業。
+- 開発コードはPR #1としてmainにマージ済み。インストール・サーバー反映は別の作業。
 
 ## 段階と完成条件
 
@@ -126,7 +126,7 @@ Cinemaへ完全再現できるとは扱わない。必要な表現を一つず�
 
 ## 関連
 
-- [実装中のPR #1](https://github.com/flamoris-jp/flamoris-cinema/pull/1)
+- [マージ済みのPR #1](https://github.com/flamoris-jp/flamoris-cinema/pull/1)
 - [Kachinco #124: 映画エンジン全体計画](https://github.com/flamoris-jp/flamoris-kachinco/issues/124)
 - [Glyph #3: 文字アクター接続](https://github.com/flamoris-jp/flamoris-glyph/issues/3)
 - [責任分界と設計](architecture.md)
