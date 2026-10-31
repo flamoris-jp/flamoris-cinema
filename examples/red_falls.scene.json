@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "fps": 30,
+  "duration_seconds": 5,
+  "actors": [
+    {"id": "red_actor_proxy", "position": [0, 0, 3.5], "radius": 0.65, "color": [0.8, 0.05, 0.1]}
+  ]
+}
