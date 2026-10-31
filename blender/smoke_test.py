@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from flamoris_cinema.blender_bridge import build_scene, export_take, script_args
 from flamoris_cinema.core import simulate
+from flamoris_cinema.framing import check_framing
 from flamoris_cinema.io import read_json, write_json
 
 
@@ -27,6 +28,10 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = read_json(ROOT / 'examples/red_falls.scene.json')
     animation = simulate(scene)
+    framing = check_framing(scene, animation)
+    write_json(args.out / 'framing.json', framing)
+    if not framing['passed']:
+        raise ValueError('whole-sphere camera framing preflight failed; inspect framing.json')
     write_json(args.out / 'scene.json', scene)
     write_json(args.out / 'motion.anim.json', animation)
     count = len(animation['frames'])
@@ -61,6 +66,7 @@ def main():
         'device': 'CPU', 'mode': 'full' if args.full else 'preview',
         'frames_per_camera': frames, 'width': scene['render']['width'], 'height': scene['render']['height'],
         'project_sha256': project_hashes,
+        'framing': 'passed',
         'roundtrip': 'passed', 'edited_subset_acceptance': 'passed',
         'elapsed_seconds': time.monotonic() - started,
     })

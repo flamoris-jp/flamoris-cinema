@@ -108,8 +108,19 @@ verify the reopened-project hashes; visual appearance still requires inspection.
 Blender, rendering or modifying any existing receipt or ZIP. This command is not a remote execution endpoint.
 
 Use `--full --timeout 7200` with another NEW output directory to render all 150
-frames per camera. These are PNG sequences; movie encoding is a later handoff.
-The ZIP is a local collection artifact, not automatically uploaded.
+frames per camera. Add `--encode` to create `wide.mp4` and `close.mp4` with
+FFmpeg/libx264. The runner requires ffmpeg/ffprobe on PATH before starting the
+expensive render, then verifies both streams are 1280×720, 30 fps, 150 frames and
+five seconds. Encoder logs and source PNGs remain available if encoding fails.
+This makes silent review clips; Kachinco still owns sound and final editing.
+The ZIP is a local collection artifact, not automatically uploaded. For review,
+the two MP4s can be transferred instead of the complete PNG archive.
+
+The sample now performs whole-sphere framing preflight across all 150 samples
+before rendering. It reserves 5% at each image edge, uses the bridge's explicit
+0.1..1000 m clip range and records `framing.json`. A failed preflight stops the
+job. The test is renderer-independent geometry; inspect actual renders for
+occlusion, lighting and staging. See `framing.check_framing` and its tests.
 
 For only the roundtrip test, set `BLENDER` to the executable's path if it is not on PATH, then run:
 

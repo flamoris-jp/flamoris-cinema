@@ -44,3 +44,17 @@ Still pending: full 150-frame sequences, camera framing refinement, Cinema GPU
 rendering, Windows Blender native acceptance, Glyph geometry, and character acting.
 This evidence establishes a CPU preview integration, not completion of roadmap
 stage 1's full five-second two-camera acceptance or the film engine.
+
+## Follow-up preparation: full sequence (execution pending)
+
+The close sample camera was moved from `[3.5,-5,2.6]` toward `[0.7,0,1.2]` at 45°
+to `[3.5,-7,4.5]` toward `[0.85,0,2.1]` at 60° horizontal FOV. Simulation inputs and
+sampled motion are unchanged. Static sphere/frustum preflight passes all 150 frames
+for both cameras with a 5% margin along each screen edge. The original close camera
+fails a regression test as expected; new framing has not yet been visually accepted
+in Blender. `framing.json` is collected by new jobs.
+
+`--full --encode` renders 150 PNGs per camera and encodes the sequences as two
+silent MP4s. Encoding and ffprobe validation were exercised locally with generated
+solid-colour test frames; this is **not** evidence of rendering the actual complete
+Cinema scene. The real five-second two-camera render and visual review remain pending.

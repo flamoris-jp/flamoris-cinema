@@ -150,6 +150,7 @@ def build_scene(scene, animation, camera=None):
     for spec in cameras:
         data = bpy.data.cameras.new(spec["id"])
         data.type, data.sensor_fit = "PERSP", "HORIZONTAL"
+        data.clip_start, data.clip_end = 0.1, 1000.0
         data.angle = math.radians(spec["fov_degrees"])
         obj = bpy.data.objects.new(spec["id"], data)
         target.collection.objects.link(obj)

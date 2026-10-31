@@ -5,6 +5,7 @@ Use from a repository checkout; no pip install is required.
 """
 import argparse
 import hashlib
+from fractions import Fraction
 import json
 from pathlib import Path
 import shutil
@@ -49,6 +50,10 @@ def validate_outputs(folder, full=False):
         raise ValueError('unexpected rendered sample set')
     if (result.get('width'), result.get('height')) != (1280, 720):
         raise ValueError('unexpected render dimensions')
+    if 'framing' in result:
+        framing = read_json(folder / 'framing.json')
+        if result['framing'] != 'passed' or framing.get('passed') is not True:
+            raise ValueError('whole-sphere framing preflight did not pass')
     for camera in ('wide', 'close'):
         root = folder / camera
         validate_take(read_json(root / 'returned.take.json'))
@@ -67,10 +72,59 @@ def validate_outputs(folder, full=False):
     return result
 
 
-def run(blender, folder, full=False, timeout=900):
+def verify_video(path, probe=None):
+    probe = probe or shutil.which('ffprobe')
+    if not probe:
+        raise ValueError('ffprobe is required to verify MP4 output')
+    process = subprocess.run([probe, '-v', 'error', '-select_streams', 'v:0',
+                              '-show_entries', 'stream=width,height,avg_frame_rate,nb_frames:format=duration',
+                              '-of', 'json', str(path)], capture_output=True, text=True, timeout=60)
+    if process.returncode:
+        raise ValueError('ffprobe failed to inspect encoded video')
+    info = json.loads(process.stdout)
+    streams = info.get('streams', [])
+    if len(streams) != 1:
+        raise ValueError('encoded video must have one video stream')
+    stream = streams[0]
+    try:
+        correct = ((stream.get('width'), stream.get('height')) == (1280, 720) and
+                   Fraction(stream.get('avg_frame_rate', '0')) == 30 and
+                   int(stream.get('nb_frames', 0)) == 150 and
+                   abs(float(info.get('format', {}).get('duration', 0)) - 5) < 0.01)
+    except (ValueError, ZeroDivisionError, TypeError):
+        correct = False
+    if not correct:
+        raise ValueError('encoded video must be 1280x720, 30fps, 150 frames and 5 seconds')
+    return info
+
+
+def encode_videos(folder, encoder, probe):
+    outputs = {}
+    for camera in ('wide', 'close'):
+        output = folder / f'{camera}.mp4'
+        command = [encoder, '-nostdin', '-v', 'error', '-n', '-framerate', '30', '-start_number', '1',
+                   '-i', str(folder / camera / 'frame_%04d.png'), '-frames:v', '150',
+                   '-c:v', 'libx264', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(output)]
+        with (folder / f'ffmpeg-{camera}.log').open('wb') as log:
+            process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=300)
+        if process.returncode:
+            raise ValueError(f'MP4 encoding failed; inspect ffmpeg-{camera}.log (PNG renders are retained)')
+        verify_video(output, probe)
+        outputs[camera] = output.name
+    return outputs
+
+
+def run(blender, folder, full=False, timeout=900, encode=False):
     executable = shutil.which(str(blender))
     if executable is None:
         raise ValueError('Blender executable not found; pass --blender PATH')
+    encoder, probe = shutil.which('ffmpeg'), shutil.which('ffprobe')
+    if encode:
+        if not full or not encoder or not probe:
+            raise ValueError('--encode requires --full and ffmpeg/ffprobe on PATH')
+        available = subprocess.run([encoder, '-hide_banner', '-encoders'], capture_output=True, text=True, timeout=10)
+        if available.returncode or 'libx264' not in available.stdout:
+            raise ValueError('FFmpeg libx264 encoder is required before rendering')
     folder = Path(folder).resolve()
     folder.mkdir(parents=True, exist_ok=False)
     command = [executable, '-b', '--factory-startup', '--disable-autoexec', '--python-exit-code', '1',
@@ -80,12 +134,16 @@ def run(blender, folder, full=False, timeout=900):
     started = time.monotonic()
     receipt = {'success': False, 'command': command, 'mode': 'full' if full else 'preview'}
     try:
+        print(f'CPU render job started. Progress log: {folder / "blender.log"}', flush=True)
         with (folder / 'blender.log').open('wb') as log:
             process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=timeout, check=False)
         if process.returncode != 0:
             raise ValueError(f'Blender exited with code {process.returncode}; inspect blender.log')
         result = validate_outputs(folder, full)
-        receipt.update(success=True, blender_result=result)
+        receipt['blender_result'] = result
+        if encode:
+            receipt['videos'] = encode_videos(folder, encoder, probe)
+        receipt['success'] = True
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         receipt['error'] = str(exc)
     receipt['elapsed_seconds'] = time.monotonic() - started
@@ -111,8 +169,11 @@ def main(argv=None):
     parser.add_argument('--out', required=True, type=Path, help='NEW job directory, or existing directory with --check-only')
     parser.add_argument('--check-only', action='store_true', help='recheck existing output without Blender or changing files')
     parser.add_argument('--full', action='store_true', help='render 150 frames per camera; default is 3 previews per camera')
+    parser.add_argument('--encode', action='store_true', help='with --full, make and verify two 5-second MP4s using ffmpeg/ffprobe')
     parser.add_argument('--timeout', type=int, default=900, help='process timeout seconds (1..7200)')
     args = parser.parse_args(argv)
+    if args.encode and (not args.full or args.check_only):
+        parser.error('--encode requires --full and cannot be used with --check-only')
     if not 1 <= args.timeout <= 7200:
         parser.error('--timeout must be in 1..7200')
     try:
@@ -122,11 +183,12 @@ def main(argv=None):
             print(json.dumps({'success': True, 'check_only': True, 'output': str(args.out.resolve()),
                               'blender_result': result}, ensure_ascii=False))
             return 0
-        receipt = run(args.blender, args.out, args.full, args.timeout)
+        receipt = run(args.blender, args.out, args.full, args.timeout, args.encode)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps({'success': receipt['success'], 'output': str(args.out.resolve()),
-                      'bundle': str(args.out.resolve() / 'cinema-smoke.zip'), 'error': receipt.get('error')}, ensure_ascii=False))
+                      'bundle': str(args.out.resolve() / 'cinema-smoke.zip'),
+                      'videos': receipt.get('videos', {}), 'error': receipt.get('error')}, ensure_ascii=False))
     return 0 if receipt['success'] else 1
 
 

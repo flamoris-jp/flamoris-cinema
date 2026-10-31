@@ -84,8 +84,15 @@ motion and renders frames 1/76/150 from each camera at 720p. The new job directo
 contains native projects, PNGs, returned takes, a versioned execution result, log,
 receipt, checksums and `cinema-smoke.zip`. A failed run returns nonzero and retains
 its logs/receipt; it never counts as accepted. Existing outputs can be rechecked without rendering or changing their receipt using `--check-only --out /path/to/existing-job`. Add `--full --timeout 7200` in a NEW
-job directory for all 150 frames per camera. This is CPU-only; installation GPU
+job directory for all 150 frames per camera. Add `--encode` to also produce and
+verify `wide.mp4` and `close.mp4` (5 seconds, 720p, 30 fps). FFmpeg with libx264 and
+ffprobe must already be on PATH; the runner checks before rendering. This is CPU-only; installation GPU
 smoke results do not by themselves verify Cinema rendering.
+
+Before any sample rendering, geometric preflight checks the whole sphere at all
+150 samples, reserving 5% of screen width/height along each edge; results are saved
+in `framing.json`. The close sample camera was reframed after the first real preview.
+This checks perspective clipping, not occlusion or final image appearance.
 
 ## Development checks
 

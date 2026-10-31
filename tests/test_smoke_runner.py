@@ -74,3 +74,26 @@ class SmokeRunnerTests(unittest.TestCase):
                 path.write_bytes(payload)
                 with self.subTest(payload=payload), self.assertRaises(ValueError):
                     runner.native_project_container(path)
+
+    @unittest.skipUnless(runner.shutil.which('ffmpeg') and runner.shutil.which('ffprobe'), 'FFmpeg tools unavailable')
+    def test_encode_and_verify_real_five_second_mp4s(self):
+        import struct
+        import zlib
+        def chunk(kind, content):
+            return struct.pack('>I', len(content)) + kind + content + struct.pack('>I', zlib.crc32(kind + content) & 0xffffffff)
+        pixels = (b'\x00' + b'\xff\x00\x00' * 1280) * 720
+        image = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 1280, 720, 8, 2, 0, 0, 0)) +
+                 chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b''))
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            for camera in ('wide', 'close'):
+                (folder / camera).mkdir()
+                for frame in range(1, 151):
+                    (folder / camera / f'frame_{frame:04d}.png').write_bytes(image)
+            outputs = runner.encode_videos(folder, runner.shutil.which('ffmpeg'), runner.shutil.which('ffprobe'))
+            self.assertEqual(set(outputs), {'wide', 'close'})
+            short = folder / 'short.mp4'
+            subprocess.run([runner.shutil.which('ffmpeg'), '-v', 'error', '-i', str(folder / 'wide.mp4'),
+                            '-t', '1', '-c', 'copy', str(short)], check=True, capture_output=True, timeout=60)
+            with self.assertRaisesRegex(ValueError, '150 frames'):
+                runner.verify_video(short)
