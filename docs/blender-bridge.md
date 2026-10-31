@@ -6,8 +6,8 @@ Kachinco owns timelines, sound, compositing and final video export.
 
 **Implemented:** offline importer, sampled-motion exporter, static camera/light
 mapping, optional CPU PNG rendering and a real-Blender acceptance script.
-**Verified:** portable tests and a reviewed external Blender 5.2.3 CPU preview/subset roundtrip.
-See [acceptance evidence](acceptance.md). Full sequences, final framing and Cinema GPU rendering remain pending. Target: Blender 5.2.3 LTS.
+**Verified:** portable tests and reviewed external Blender 5.2.3 CPU/HIP previews and subset roundtrips.
+See [acceptance evidence](acceptance.md). Full sequences, continuous-motion review and sustained GPU performance remain pending. Target: Blender 5.2.3 LTS.
 The adapter rejects versions older than 4.5; later versions require acceptance.
 
 ## Workflow

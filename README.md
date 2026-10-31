@@ -7,7 +7,7 @@ Glyphは文字の形、Cinemaは空間と演技、Blenderはネイティブ編�
 
 **Status: development prototype, 0.1.0.** Implemented: validated scene/take contracts,
 camera-independent sphere/floor simulation and Blender subset importer/exporter.
-Portable core tests pass locally; real Blender 5.2.3 CPU preview and subset roundtrip have passed. Full sequences and framing acceptance remain pending.
+Portable core tests pass locally; real Blender 5.2.3 CPU/HIP previews and subset roundtrips have passed. Full sequences and framing acceptance remain pending.
 This is not a full rigid-body engine, character animation system or AI film director.
 
 ## Identity and ownership
@@ -47,7 +47,7 @@ friction, obstacle trip, walking or recovery are implemented.
 
 ## Optional Blender workflow
 
-Target: Blender 5.2.3 LTS; minimum API version 4.5. CPU preview acceptance is recorded in [acceptance evidence](docs/acceptance.md); full sequences remain pending. Run from the checkout:
+Target: Blender 5.2.3 LTS; minimum API version 4.5. CPU/HIP preview acceptance is recorded in [acceptance evidence](docs/acceptance.md); full sequences remain pending. Run from the checkout:
 
 ```sh
 blender -b --python-exit-code 1 --python blender/import_scene.py -- examples/red_falls.scene.json red.anim.json red-wide.blend --camera wide
@@ -104,8 +104,9 @@ This renders the same six preview images. A single HIP GPU must match the name/i
 fragment. CPU and other render devices are disabled; missing/ambiguous GPUs fail
 instead of selecting CPU. Device selection is reapplied after native-file reload,
 checked before frames and recorded for each camera, including the effective HIP RT
-preference. Host validation rejects a CPU result when HIP was requested. Actual
-GPU execution/performance still needs the installed-runtime test and telemetry.
+preference. Host validation rejects a CPU result when HIP was requested. A real HIP preview has passed; see [acceptance evidence](docs/acceptance.md).
+The measured end-to-end preview was slower than the original CPU run under different
+thread/framing conditions; isolated performance and sustained-load tests remain pending.
 
 The default render/helper thread setting is now 2 (`--threads 1..64`), also passed
 to Blender and common CPU math-library environment settings. MP4 encoding uses two

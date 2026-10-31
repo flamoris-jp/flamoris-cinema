@@ -71,3 +71,52 @@ Blender device logs, result metadata, elapsed time and live CPU/GPU telemetry.
 Only then proceed to the full sequence. A separately successful GPU installation
 smoke test does not complete this Cinema-specific acceptance step. Prior CPU preview
 evidence above remains valid and separate from HIP rendering.
+
+## 2026-10-31: HIP preview accepted
+
+Reviewed the user-supplied `cinema-smoke(1).zip` from the explicit-HIP runner,
+corresponding to adapter commit `2ea4fff1fed0d65471c71e28d26436a1c2c9f582`.
+The existing-output checker passes with the submitted artifacts unchanged.
+
+| Check | Result |
+| --- | --- |
+| Blender | 5.2.3 LTS, build `e13b728c6880` |
+| Device in both camera reports | AMD Radeon RX 9060 XT, HIP, Cycles GPU |
+| CPU render device | Disabled |
+| HIP RT | Enabled |
+| Thread setting | 2 |
+| Images | 6 decoded 1280×720 PNGs, frames 1/76/150 per camera |
+| Framing | 150-sample sphere/frustum check passed; revised close camera shows the whole ball in all three rendered samples |
+| Native save/reload, motion and edited-subset roundtrip | Passed |
+| Uploaded manifest | All 16 listed entries matched size/SHA-256; native project hashes matched result metadata |
+| Motion versus previous CPU preview | `motion.anim.json` bytes identical |
+
+The unchanged wide-camera images are nearly identical to the CPU preview: per
+channel mean absolute 8-bit RGB differences are below 0.0002 across all three images.
+The close-camera images are not directly compared pixel-wise because framing changed.
+
+### Timing comparison and limits
+
+| Preview run | Blender-script elapsed | Host-process elapsed |
+| --- | --- | --- |
+| Original CPU preview | 27.64 s | 29.14 s |
+| Explicit HIP preview | 48.12 s | 49.66 s |
+
+These times include acceptance checks, scene creation, native save/reload, sampled
+motion export and PNG writes. They are **not isolated GPU kernel/render times**.
+The HIP run is slower end to end in these samples. CPU thread configuration and
+the close camera also changed, so this is not a controlled CPU/GPU benchmark.
+No stage timings were collected to attribute the delay to rendering, CPU-side
+processing, denoising, PNG output or device initialization. Do not claim a GPU
+speedup or name a bottleneck without further measurements.
+
+Live observations during the HIP run sampled CPU at 62.8°C, GPU edge/junction at
+27/28°C and GPU memory at about 1 GiB. A GPU utilization snapshot was only 2%; the
+busy peak was not captured. These are snapshots, not run-wide maxima. The earlier
+CPU full-render observation near 85°C was from a longer run with different thread
+settings, not an otherwise identical thermal comparison. No temperature ceiling
+or guaranteed thermal benefit is established by the short preview.
+
+The corrected close framing and CPU/HIP subset connections now pass preview
+acceptance. A complete five-second movie, continuous motion and sustained-load
+measurements remain pending. `videos: {}` is expected for preview mode.
