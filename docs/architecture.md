@@ -34,7 +34,13 @@ physics histories. Native Blender extras stay in the native project. The support
 subset is documented in [the bridge contract](blender-bridge.md), with strict
 structural rejection where data would otherwise be misrepresented.
 
-## Next slices, in order
+## Roadmap and immediate engineering slices
+
+The user-facing milestones and acceptance gates are authoritative in
+[the Cinema roadmap](roadmap.md). The list below expands engineering dependencies;
+character performance, the first short and later AI direction are tracked there.
+
+### Immediate engineering slices, in order
 
 1. **Real Blender acceptance:** run the included roundtrip test and inspect the
    two-camera CPU render. Record Blender version and results before claiming a

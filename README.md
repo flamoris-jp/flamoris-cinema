@@ -19,6 +19,8 @@ Generation owns generated assets/model inference. Blender owns native projects,
 shaders, modifiers and renderer features beyond the supported interchange subset.
 
 Start at the [FLAMORIS organization map](https://github.com/flamoris-jp/.github).
+開発の道筋と各段階の完成条件は [ロードマップ](docs/roadmap.md) を参照。
+
 See [architecture and next slices](docs/architecture.md),
 [scene/time contract](docs/scene-contract.md), and [Blender bridge](docs/blender-bridge.md).
 
