@@ -47,7 +47,7 @@ friction, obstacle trip, walking or recovery are implemented.
 
 ## Optional Blender workflow
 
-Target: Blender 4.5 LTS; actual version acceptance pending. Run from the checkout:
+Target: Blender 5.2.3 LTS; minimum API version 4.5. Cinema bridge acceptance is pending. Run from the checkout:
 
 ```sh
 blender -b --python-exit-code 1 --python blender/import_scene.py -- examples/red_falls.scene.json red.anim.json red-wide.blend --camera wide
@@ -70,6 +70,22 @@ and point lights. Geometry changes, rigs, modifiers and other listed structural
 features are rejected. Native renderer cosmetics remain in `.blend`. See the
 [precise supported-subset table and acceptance procedure](docs/blender-bridge.md).
 No installation, live service, MCP endpoint or GPU setup is included.
+
+### Collected CPU acceptance job
+
+From a checkout, run one fixed, repository-owned Blender job (no pip install needed):
+
+```sh
+python tools/run_blender_smoke.py --blender /path/to/blender --out /path/to/new-job
+```
+
+It runs edited-subset acceptance, saves/reloads native projects, compares sampled
+motion and renders frames 1/76/150 from each camera at 720p. The new job directory
+contains native projects, PNGs, returned takes, a versioned execution result, log,
+receipt, checksums and `cinema-smoke.zip`. A failed run returns nonzero and retains
+its logs/receipt; it never counts as accepted. Add `--full --timeout 7200` in a NEW
+job directory for all 150 frames per camera. This is CPU-only; installation GPU
+smoke results do not by themselves verify Cinema rendering.
 
 ## Development checks
 

@@ -32,6 +32,80 @@ def _mark(obj, kind, name):
         obj["cinema_mesh"] = _mesh_digest(obj)
 
 
+def _simple_shader(tree, shader_type, output_type):
+    """Return one unlinked-input shader connected directly to one output."""
+    if tree is None or tree.animation_data or len(tree.nodes) != 2 or len(tree.links) != 1:
+        raise ValueError("only a static two-node Cinema shader is portable")
+    shaders = [n for n in tree.nodes if n.bl_idname == shader_type]
+    outputs = [n for n in tree.nodes if n.bl_idname == output_type]
+    if len(shaders) != 1 or len(outputs) != 1:
+        raise ValueError("unsupported shader nodes")
+    shader, output = shaders[0], outputs[0]
+    link = tree.links[0]
+    if (link.from_node != shader or link.from_socket != shader.outputs[0] or
+            link.to_node != output or link.to_socket != output.inputs['Surface'] or
+            any(socket.is_linked for socket in shader.inputs) or shader.mute or output.mute):
+        raise ValueError("unsupported shader links or muted nodes")
+    return shader
+
+
+def _make_material(material, color):
+    import bpy
+    # In 5.x use_nodes is deprecated and always True. Never use it as a
+    # discriminator or assume diffuse_color drives the rendered shader.
+    if bpy.app.version < (5, 0, 0):
+        material.use_nodes = True
+    tree = material.node_tree
+    if tree is None:
+        raise ValueError("Blender did not provide a material node tree")
+    tree.nodes.clear()
+    shader = tree.nodes.new('ShaderNodeBsdfDiffuse')
+    shader.name = 'CinemaDiffuse'
+    shader.inputs['Color'].default_value = (*color, 1.0)
+    shader.inputs['Roughness'].default_value = 0.0
+    output = tree.nodes.new('ShaderNodeOutputMaterial')
+    tree.links.new(shader.outputs[0], output.inputs['Surface'])
+    material.diffuse_color = (*color, 1.0)
+
+
+def _material_color(material):
+    if material.animation_data:
+        raise ValueError("animated materials are outside v1")
+    if material.node_tree is None:
+        color = material.diffuse_color  # legacy 4.5 non-node projects
+    else:
+        shader = _simple_shader(material.node_tree, 'ShaderNodeBsdfDiffuse', 'ShaderNodeOutputMaterial')
+        if abs(shader.inputs['Roughness'].default_value) > 1e-6:
+            raise ValueError("nonzero diffuse roughness is outside v1")
+        color = shader.inputs['Color'].default_value
+    if abs(color[3] - 1) > 1e-6:
+        raise ValueError("transparent materials are outside v1")
+    return list(color[:3])
+
+
+def _neutral_light_nodes(data):
+    # 5.2 applies base light settings on top of the node output. Keep that
+    # output neutral: data.color and data.energy remain the portable values.
+    if data.node_tree is not None:
+        tree = data.node_tree
+        tree.nodes.clear()
+        shader = tree.nodes.new('ShaderNodeEmission')
+        shader.inputs['Color'].default_value = (1, 1, 1, 1)
+        shader.inputs['Strength'].default_value = 1.0
+        output = tree.nodes.new('ShaderNodeOutputLight')
+        tree.links.new(shader.outputs[0], output.inputs['Surface'])
+
+
+def _validate_light_nodes(data):
+    if data.node_tree is not None:
+        shader = _simple_shader(data.node_tree, 'ShaderNodeEmission', 'ShaderNodeOutputLight')
+        if (any(abs(v - 1) > 1e-6 for v in shader.inputs['Color'].default_value) or
+                abs(shader.inputs['Strength'].default_value - 1) > 1e-6):
+            raise ValueError("light shader must remain neutral; edit light Color/Power")
+    if abs(getattr(data, 'exposure', 0)) > 1e-6 or getattr(data, 'use_temperature', False):
+        raise ValueError("light exposure and temperature are outside v1")
+
+
 def build_scene(scene, animation, camera=None):
     """Build in a NEW Blender scene. Existing scenes/objects are retained."""
     import bpy
@@ -62,8 +136,7 @@ def build_scene(scene, animation, camera=None):
         obj.name = actor["id"]
         obj.location = actor["position"]
         mat = bpy.data.materials.new(actor["id"] + "_color")
-        mat.use_nodes = False
-        mat.diffuse_color = (*actor["color"], 1.0)
+        _make_material(mat, actor["color"])
         obj.data.materials.append(mat)
         _mark(obj, "actor", actor["id"])
         objects[actor["id"]] = obj
@@ -90,6 +163,7 @@ def build_scene(scene, animation, camera=None):
     for spec in scene.get("lights", []):
         data = bpy.data.lights.new(spec["id"], "POINT")
         data.energy, data.color = spec["energy"], spec["color"]
+        _neutral_light_nodes(data)
         obj = bpy.data.objects.new(spec["id"], data)
         target.collection.objects.link(obj)
         obj.location = spec["position"]
@@ -163,11 +237,9 @@ def export_take():
         for actor in scene["actors"]:
             obj = objects[actor["id"]]
             materials = obj.data.materials
-            if len(materials) != 1 or materials[0] is None or materials[0].use_nodes or materials[0].animation_data:
-                raise ValueError(f"{actor['id']}: only one static non-node RGB material is supported")
-            if abs(materials[0].diffuse_color[3] - 1) > 1e-6:
-                raise ValueError("transparent materials are outside v1")
-            actor["color"] = list(materials[0].diffuse_color[:3])
+            if len(materials) != 1 or materials[0] is None:
+                raise ValueError(f"{actor['id']}: exactly one RGB material is required")
+            actor["color"] = _material_color(materials[0])
         floor = objects["__floor__"]
         if ((floor.location - Vector((0, 0, -0.1))).length > 1e-6 or
                 (floor.scale - Vector((10, 10, 0.1))).length > 1e-6 or
@@ -188,8 +260,9 @@ def export_take():
             spec["fov_degrees"] = math.degrees(obj.data.angle)
         for spec in scene.get("lights", []):
             obj = objects[spec["id"]]
-            if obj.data.type != "POINT" or obj.data.use_nodes:
-                raise ValueError("only non-node point lights are portable")
+            if obj.data.type != "POINT":
+                raise ValueError("only point lights are portable")
+            _validate_light_nodes(obj.data)
             spec.update(position=list(obj.location), color=list(obj.data.color), energy=obj.data.energy)
         frames = []
         for index in range(count):

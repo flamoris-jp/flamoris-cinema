@@ -7,7 +7,7 @@ Kachinco owns timelines, sound, compositing and final video export.
 **Implemented:** offline importer, sampled-motion exporter, static camera/light
 mapping, optional CPU PNG rendering and a real-Blender acceptance script.
 **Verified here:** portable Python tests only. Blender execution, visual quality,
-GPU rendering and live deployment remain unverified. Target: Blender 4.5 LTS.
+Cinema GPU rendering and live deployment remain unverified. Target: Blender 5.2.3 LTS.
 The adapter rejects versions older than 4.5; later versions require acceptance.
 
 ## Workflow
@@ -49,9 +49,9 @@ Existing output files and render directories are refused.
 | Actor identity | `cinema_id`/`cinema_kind` custom properties; display-name edits allowed; new/deleted/duplicated/retagged entities rejected |
 | Shape | Import creates UV sphere proxies; edited vertex/topology data and shape keys rejected on export; Glyph outlines not imported |
 | Actor animation | Translation sampled at every integer output frame; original source conditions retained separately; rotation/scale edits rejected at samples |
-| Material | One opaque non-node static diffuse RGB per actor; export reads its colour |
+| Material | One opaque static Diffuse BSDF → Material Output graph; export reads shader RGB, not viewport diffuse_color |
 | Camera | Static perspective, horizontal FOV, position, target direction; original target distance retained; roll, shift, DOF, non-unit scale and animation rejected |
-| Lights | Static non-node point position, RGB and energy; animation/non-unit scale rejected |
+| Lights | Static point position, RGB and energy; neutral Emission → Light Output graph (or legacy no-tree light); custom light graphs rejected |
 | Floor | Fixed Z=0 collision plane; finite 20m render helper; topology/transform edits rejected |
 | Timeline | Original fps and duration; altered frame range or fps rejected; zero-based Cinema to one-based Blender mapping |
 | Resolution | Square pixels, 100% dimensions; width and height returned |
@@ -70,9 +70,45 @@ a take. There is no automatic merge or write back to an existing source file.
 Cinema does not claim arbitrary `.blend` files are portable or safe; only open
 trusted native projects in a local Blender process.
 
+## Blender 5.x compatibility
+
+Blender 5.x always uses material nodes: setting `Material.use_nodes=False` no
+longer disables them. The adapter creates one Diffuse BSDF connected to Material
+Output and round-trips its Color input. Change that shader input to edit actor RGB;
+viewport `diffuse_color` is not the portable rendered colour. Additional nodes,
+links, material animation and nonzero diffuse roughness are rejected.
+
+5.x also deprecates the light `use_nodes` flag. The bridge checks the node graph
+itself. Where a light tree exists it contains neutral white Emission of strength 1
+connected to Light Output; the portable Color/Power live on the light data.
+Texture/animated light trees, exposure and temperature are outside the subset.
+API fixes do not substitute for running the installed-version acceptance job.
+
+References: [Material API](https://docs.blender.org/api/5.0/bpy.types.Material.html),
+[Light API](https://docs.blender.org/api/5.2/bpy.types.Light.html),
+[Cycles light nodes](https://docs.blender.org/manual/en/5.2/render/cycles/light_settings.html).
+
 ## Acceptance after separate Blender setup
 
-Set `BLENDER` to the executable's path if it is not on PATH, then run:
+For a collected, CPU-only test from a checkout (no pip install required):
+
+```sh
+python tools/run_blender_smoke.py --blender /path/to/blender --out /path/to/new-job
+```
+
+Default: two cameras × three PNG frames (1/76/150), both saved/reloaded native
+projects, returned take JSON, actual Blender version/build hash, logs, failure or
+success receipt, source/output SHA-256 manifests and a ZIP for inspection. Existing
+job directories are refused. The child has a 900-second timeout; a timeout/nonzero
+exit/missing result/missing output is failure. Failed logs remain available.
+The host checks native-file/PNG headers and dimensions; visual appearance still
+requires inspection. This command is not a remote execution endpoint.
+
+Use `--full --timeout 7200` with another NEW output directory to render all 150
+frames per camera. These are PNG sequences; movie encoding is a later handoff.
+The ZIP is a local collection artifact, not automatically uploaded.
+
+For only the roundtrip test, set `BLENDER` to the executable's path if it is not on PATH, then run:
 
 ```sh
 python -m unittest discover -s tests -v
