@@ -1,11 +1,16 @@
 # FLAMORIS Cinema
 
+> **Status: PAUSED / 構想保存中 (2026-10-31).** 新規実装・実験・ロードマップの進行は停止しています。既存の検証済みコード・成果・履歴は保存します。再開は明示的な判断後に行います。
+> **Vision:** 自然言語で伝えた「起こしたい出来事」を、AIが理解できるプロジェクト設計図に記述し、必要な制作ツールを選んで組み合わせるコントローラー。映画制作は応用例であり、唯一の目的ではありません。
+> [構想と休眠の判断](docs/vision-and-pause.md)を先に参照してください。既存の実験仕様はそのまま残しています。
+
+
 **Portable scene, sampled animation and cinematic rendering infrastructure for FLAMORIS.**
 
 シーンと演技データを保持し、同じ演技を複数のカメラから撮影するための基盤です。
 Glyphは文字の形、Cinemaは空間と演技、Blenderはネイティブ編集と描画、Kachincoは編集と音を担当します。
 
-**Status: development prototype, 0.1.0.** Implemented: validated scene/take contracts,
+**Implementation snapshot at pause: prototype 0.1.0 (not the future AI controller).** Implemented: validated scene/take contracts,
 camera-independent sphere/floor simulation and Blender subset importer/exporter.
 Portable tests pass locally; Blender 5.2.3 CPU/HIP previews, subset roundtrips and
 two full five-second HIP camera sequences have passed. A read-only Glyph adapter,
@@ -13,7 +18,7 @@ immutable 赤 fixture and v2 staging/Blender mapping have also passed external n
 HIP preview acceptance. See [Glyph actors](docs/glyph-actors.md).
 This is not a full rigid-body engine, character animation system or AI film director.
 
-The next accepted slice is an authored **three-second walking 赤**: v3 part poses,
+The previously proposed next slice (superseded by the pause) was an authored **three-second walking 赤**: v3 part poses,
 native save/reload/edited-pose roundtrip, a 72-frame Flamenco HIP render and guarded
 Kachinco CLI import/preview/save. Walking is procedural acting; falling/collision/
 recovery remain future work. See [Glyph performance](docs/glyph-performance.md).

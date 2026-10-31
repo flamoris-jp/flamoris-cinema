@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Project pause (2026-10-31)
+
+**Cinema development is paused by product decision.** Read [docs/vision-and-pause.md](docs/vision-and-pause.md) before proposing or implementing changes. The repo currently contains a working **scene/performance prototype**, not a completed natural-language AI project controller. Preserve existing tests, accepted results, and historical plans. Do not continue the old roadmap, start new implementation, or operate external runtimes simply because historical documents say “next.” Documentation-only maintenance is permitted when explicitly requested; feature development resumes only after an explicit new user decision. This pause is a development decision, not an instruction to stop services, archive the repository, or delete experiments.
+
 This repository is part of the FLAMORIS ecosystem.
 
 AI agents and human contributors should inspect the current repository before making substantial changes. Do not assume that setup, build, deployment, service names, paths, configuration, or architecture match another FLAMORIS repository.
