@@ -1,5 +1,6 @@
 """Runner failure/collection tests. These do not emulate Blender acceptance."""
 import importlib.util
+import gzip
 import json
 from pathlib import Path
 import subprocess
@@ -54,3 +55,22 @@ class SmokeRunnerTests(unittest.TestCase):
                 result = runner.run(sys.executable, Path(temp) / 'job')
             self.assertFalse(result['success'])
             self.assertIn('result.json', result['error'])
+
+    def test_native_container_variants(self):
+        # Tiny file-signature fixtures, not Blender scene parsing/acceptance.
+        raw = b'BLENDER17-01v0502' + b'fixture-only' * 8
+        zstd = bytes.fromhex('28b52ffd2071250100e8424c454e44455231372d30317630353032666978747572652d6f6e6c790100c5a7e204')
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'scene.blend'
+            for container, payload in [('raw', raw), ('gzip', gzip.compress(raw)), ('zstd', zstd)]:
+                with self.subTest(container=container):
+                    path.write_bytes(payload)
+                    self.assertEqual(runner.native_project_container(path), container)
+
+    def test_native_container_rejects_other_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'scene.blend'
+            for payload in [b'', b'BLENDER', b'not a Blender container' * 3]:
+                path.write_bytes(payload)
+                with self.subTest(payload=payload), self.assertRaises(ValueError):
+                    runner.native_project_container(path)

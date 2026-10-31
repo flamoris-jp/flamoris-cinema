@@ -1,5 +1,6 @@
 """Repository-owned script launched by tools/run_blender_smoke.py inside Blender."""
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -30,6 +31,7 @@ def main():
     write_json(args.out / 'motion.anim.json', animation)
     count = len(animation['frames'])
     frames = list(range(1, count + 1)) if args.full else sorted({1, count // 2 + 1, count})
+    project_hashes = {}
     for camera in ('wide', 'close'):
         folder = args.out / camera
         folder.mkdir()
@@ -39,6 +41,7 @@ def main():
         # Exercise serialization as well as an in-memory transfer.
         bpy.ops.wm.open_mainfile(filepath=str(blend_path))
         returned = export_take()
+        project_hashes[camera] = hashlib.sha256(blend_path.read_bytes()).hexdigest()
         for original, restored in zip(animation['frames'], returned['animation']['frames']):
             for name, position in original['positions'].items():
                 if any(not math.isclose(a, b, abs_tol=1e-5, rel_tol=0) for a, b in zip(position, restored['positions'][name])):
@@ -57,6 +60,7 @@ def main():
         'blender_build_hash': bpy.app.build_hash.decode('utf-8', errors='replace'),
         'device': 'CPU', 'mode': 'full' if args.full else 'preview',
         'frames_per_camera': frames, 'width': scene['render']['width'], 'height': scene['render']['height'],
+        'project_sha256': project_hashes,
         'roundtrip': 'passed', 'edited_subset_acceptance': 'passed',
         'elapsed_seconds': time.monotonic() - started,
     })

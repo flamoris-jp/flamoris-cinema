@@ -7,7 +7,7 @@ Glyphは文字の形、Cinemaは空間と演技、Blenderはネイティブ編�
 
 **Status: development prototype, 0.1.0.** Implemented: validated scene/take contracts,
 camera-independent sphere/floor simulation and Blender subset importer/exporter.
-Portable core tests pass locally; real Blender roundtrip/render acceptance is pending.
+Portable core tests pass locally; real Blender 5.2.3 CPU preview and subset roundtrip have passed. Full sequences and framing acceptance remain pending.
 This is not a full rigid-body engine, character animation system or AI film director.
 
 ## Identity and ownership
@@ -47,7 +47,7 @@ friction, obstacle trip, walking or recovery are implemented.
 
 ## Optional Blender workflow
 
-Target: Blender 5.2.3 LTS; minimum API version 4.5. Cinema bridge acceptance is pending. Run from the checkout:
+Target: Blender 5.2.3 LTS; minimum API version 4.5. CPU preview acceptance is recorded in [acceptance evidence](docs/acceptance.md); full sequences remain pending. Run from the checkout:
 
 ```sh
 blender -b --python-exit-code 1 --python blender/import_scene.py -- examples/red_falls.scene.json red.anim.json red-wide.blend --camera wide
@@ -83,7 +83,7 @@ It runs edited-subset acceptance, saves/reloads native projects, compares sample
 motion and renders frames 1/76/150 from each camera at 720p. The new job directory
 contains native projects, PNGs, returned takes, a versioned execution result, log,
 receipt, checksums and `cinema-smoke.zip`. A failed run returns nonzero and retains
-its logs/receipt; it never counts as accepted. Add `--full --timeout 7200` in a NEW
+its logs/receipt; it never counts as accepted. Existing outputs can be rechecked without rendering or changing their receipt using `--check-only --out /path/to/existing-job`. Add `--full --timeout 7200` in a NEW
 job directory for all 150 frames per camera. This is CPU-only; installation GPU
 smoke results do not by themselves verify Cinema rendering.
 

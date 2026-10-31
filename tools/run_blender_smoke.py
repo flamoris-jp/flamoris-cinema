@@ -20,6 +20,25 @@ from flamoris_cinema.interchange import validate_take
 from flamoris_cinema.io import read_json, write_json
 
 
+def native_project_container(path):
+    """Recognize Blender containers, not the inner file structure.
+
+    Native structural validation belongs to Blender's save/reopen job. Compressed
+    .blend files do not begin with BLENDER; no decompressor dependency is needed.
+    """
+    with Path(path).open('rb') as stream:
+        prefix = stream.read(17)
+    if len(prefix) < 17:
+        raise ValueError('truncated native Blender project')
+    if prefix.startswith(b'BLENDER'):
+        return 'raw'
+    if prefix.startswith(b'\x1f\x8b'):
+        return 'gzip'
+    if prefix.startswith(b'\x28\xb5\x2f\xfd'):
+        return 'zstd'
+    raise ValueError('unrecognized native Blender project container')
+
+
 def validate_outputs(folder, full=False):
     result = read_json(folder / 'result.json')
     if (result.get('success') is not True or result.get('roundtrip') != 'passed' or
@@ -33,9 +52,12 @@ def validate_outputs(folder, full=False):
     for camera in ('wide', 'close'):
         root = folder / camera
         validate_take(read_json(root / 'returned.take.json'))
-        with (root / 'scene.blend').open('rb') as stream:
-            if stream.read(7) != b'BLENDER':
-                raise ValueError('missing native Blender project')
+        native_project_container(root / 'scene.blend')
+        project_hashes = result.get('project_sha256')
+        if project_hashes is not None:
+            actual = hashlib.sha256((root / 'scene.blend').read_bytes()).hexdigest()
+            if project_hashes.get(camera) != actual:
+                raise ValueError('native Blender project checksum differs from reopened project')
         for frame in frames:
             with (root / f'frame_{frame:04d}.png').open('rb') as stream:
                 header = stream.read(24)
@@ -86,13 +108,20 @@ def run(blender, folder, full=False, timeout=900):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--blender', default='blender', help='executable name or absolute path')
-    parser.add_argument('--out', required=True, type=Path, help='NEW job directory')
+    parser.add_argument('--out', required=True, type=Path, help='NEW job directory, or existing directory with --check-only')
+    parser.add_argument('--check-only', action='store_true', help='recheck existing output without Blender or changing files')
     parser.add_argument('--full', action='store_true', help='render 150 frames per camera; default is 3 previews per camera')
     parser.add_argument('--timeout', type=int, default=900, help='process timeout seconds (1..7200)')
     args = parser.parse_args(argv)
     if not 1 <= args.timeout <= 7200:
         parser.error('--timeout must be in 1..7200')
     try:
+        if args.check_only:
+            result = read_json(args.out / 'result.json')
+            result = validate_outputs(args.out, full=result.get('mode') == 'full')
+            print(json.dumps({'success': True, 'check_only': True, 'output': str(args.out.resolve()),
+                              'blender_result': result}, ensure_ascii=False))
+            return 0
         receipt = run(args.blender, args.out, args.full, args.timeout)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))

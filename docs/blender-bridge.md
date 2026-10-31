@@ -6,8 +6,8 @@ Kachinco owns timelines, sound, compositing and final video export.
 
 **Implemented:** offline importer, sampled-motion exporter, static camera/light
 mapping, optional CPU PNG rendering and a real-Blender acceptance script.
-**Verified here:** portable Python tests only. Blender execution, visual quality,
-Cinema GPU rendering and live deployment remain unverified. Target: Blender 5.2.3 LTS.
+**Verified:** portable tests and a reviewed external Blender 5.2.3 CPU preview/subset roundtrip.
+See [acceptance evidence](acceptance.md). Full sequences, final framing and Cinema GPU rendering remain pending. Target: Blender 5.2.3 LTS.
 The adapter rejects versions older than 4.5; later versions require acceptance.
 
 ## Workflow
@@ -101,8 +101,11 @@ projects, returned take JSON, actual Blender version/build hash, logs, failure o
 success receipt, source/output SHA-256 manifests and a ZIP for inspection. Existing
 job directories are refused. The child has a 900-second timeout; a timeout/nonzero
 exit/missing result/missing output is failure. Failed logs remain available.
-The host checks native-file/PNG headers and dimensions; visual appearance still
-requires inspection. This command is not a remote execution endpoint.
+The host recognizes raw/gzip/Zstandard native containers and checks PNG headers/dimensions.
+Actual native structural validation happens in Blender on reopen. New jobs also
+verify the reopened-project hashes; visual appearance still requires inspection.
+`--check-only --out /path/to/existing-job` revalidates existing results without
+Blender, rendering or modifying any existing receipt or ZIP. This command is not a remote execution endpoint.
 
 Use `--full --timeout 7200` with another NEW output directory to render all 150
 frames per camera. These are PNG sequences; movie encoding is a later handoff.
