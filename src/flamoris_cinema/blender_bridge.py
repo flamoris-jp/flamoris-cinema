@@ -129,6 +129,7 @@ def build_scene(scene, animation, camera=None):
     target.render.use_motion_blur = False
     target.render.engine = "CYCLES"
     target.cycles.device, target.cycles.samples = "CPU", 16
+    target.render.threads_mode, target.render.threads = "FIXED", 2
     objects = {}
     for actor in scene["actors"]:
         bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=actor["radius"])
@@ -289,7 +290,10 @@ def import_main(argv=None):
     parser = argparse.ArgumentParser(description="Import Cinema scene/motion or a portable take into Blender")
     parser.add_argument("inputs", type=Path, nargs="+", help="scene.json animation.json output.blend OR take.json output.blend")
     parser.add_argument("--camera")
-    parser.add_argument("--render-dir", type=Path, help="optional CPU PNG sequence into a NEW directory")
+    parser.add_argument("--device", choices=("CPU", "HIP"), default="CPU")
+    parser.add_argument("--gpu-name")
+    parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument("--render-dir", type=Path, help="optional PNG sequence into a NEW directory")
     args = parser.parse_args(argv)
     try:
         if len(args.inputs) == 3:
@@ -304,7 +308,9 @@ def import_main(argv=None):
             raise ValueError("output must be a new .blend path")
         if args.render_dir and args.render_dir.exists():
             raise ValueError("render directory already exists")
+        from .render_device import configure_cycles
         target = build_scene(scene, animation, args.camera)
+        configure_cycles(target, args.device, args.gpu_name, args.threads)
         if args.render_dir and not target.camera:
             raise ValueError("rendering requires a scene camera")
         bpy.ops.wm.save_as_mainfile(filepath=str(output))

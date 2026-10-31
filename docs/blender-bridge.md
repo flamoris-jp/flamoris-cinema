@@ -146,3 +146,40 @@ The adapter uses Blender's public [keyframe insertion API](https://docs.blender.
 [scene frame evaluation](https://docs.blender.org/api/4.5/bpy.types.Scene.html)
 and [camera properties](https://docs.blender.org/api/4.5/bpy.types.Camera.html).
 API compatibility and live rendering must be verified with the installed version.
+
+## Explicit CPU/HIP selection
+
+Both `blender/import_scene.py` and the collected smoke runner accept `--device
+CPU|HIP`, `--gpu-name NAME_OR_ID_FRAGMENT` and `--threads N` (1..64, default 2).
+CPU remains the backwards-compatible default, now with a two-thread render setting.
+For an initial six-image GPU preview:
+
+```sh
+python tools/run_blender_smoke.py --blender /path/to/blender --device HIP --gpu-name "RX 9060 XT" --threads 2 --out /path/to/new-hip-preview
+```
+
+In the Blender process, the adapter selects the HIP compute backend, discovers
+available devices, requires exactly one matching GPU, disables CPU and all other
+render devices and sets Cycles to GPU. It reapplies selection after reopening each
+native project and verifies the selected flags before frames. Discovery/selection
+failure stops the job; this code has no CPU fallback path. Process-local preferences
+are not written to the user's preference file. HIP RT uses the installed Blender
+default and its effective flag is recorded rather than inferred from an earlier run.
+
+`result.json.render_devices` records each camera's selected name/id/type, backend,
+Cycles mode, CPU render flag, thread setting and HIP RT flag. The host rejects HIP
+results without explicit GPU-only selection evidence, and rejects CPU output when
+HIP was requested. These settings do not independently prove GPU utilisation or
+kernel execution: inspect actual Blender logs and live telemetry during acceptance.
+No GPU reservation, runtime activation or service control is implemented here.
+
+Blender render threads and OMP/OpenBLAS/MKL thread environment settings default to 2;
+video encoding uses two threads as well. This reduces requested CPU parallelism,
+but is not an OS CPU quota or a guarantee of a maximum temperature. GPU rendering
+still needs CPU-side scene preparation, data transfers and potentially driver/kernel
+compilation. Confirm temperatures and device use on the short preview before a full
+sequence. Existing completed CPU images remain in their original job directory;
+GPU jobs use fresh output directories, not implicit CPU/GPU mixed resumption.
+
+Design references: [GPU render configuration](https://docs.blender.org/manual/en/5.2/editors/preferences/system.html)
+and [Cycles preferences source](https://github.com/blender/blender/blob/main/intern/cycles/blender/addon/properties.py).

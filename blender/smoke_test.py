@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / 'src'))
 from flamoris_cinema.blender_bridge import build_scene, export_take, script_args
 from flamoris_cinema.core import simulate
 from flamoris_cinema.framing import check_framing
+from flamoris_cinema.render_device import configure_cycles, verify_selection, validate_options
 from flamoris_cinema.io import read_json, write_json
 
 
@@ -21,7 +22,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--full', action='store_true')
+    parser.add_argument('--device', choices=('CPU', 'HIP'), default='CPU')
+    parser.add_argument('--gpu-name')
+    parser.add_argument('--threads', type=int, default=2)
     args = parser.parse_args(script_args())
+    validate_options(args.device, args.gpu_name, args.threads)
     started = time.monotonic()
     # Includes edited RGB/translation, identity after rename and negative cases.
     runpy.run_path(str(ROOT / 'tests/blender_acceptance.py'), run_name='__main__')
@@ -36,11 +41,12 @@ def main():
     write_json(args.out / 'motion.anim.json', animation)
     count = len(animation['frames'])
     frames = list(range(1, count + 1)) if args.full else sorted({1, count // 2 + 1, count})
-    project_hashes = {}
+    project_hashes, device_reports = {}, {}
     for camera in ('wide', 'close'):
         folder = args.out / camera
         folder.mkdir()
-        build_scene(scene, animation, camera)
+        target = build_scene(scene, animation, camera)
+        configure_cycles(target, args.device, args.gpu_name, args.threads)
         blend_path = (folder / 'scene.blend').resolve()
         bpy.ops.wm.save_as_mainfile(filepath=str(blend_path))
         # Exercise serialization as well as an in-memory transfer.
@@ -55,15 +61,16 @@ def main():
         target = bpy.context.scene
         target.render.image_settings.file_format = 'PNG'
         target.render.image_settings.color_mode = 'RGBA'
-        target.cycles.device = 'CPU'
+        device_reports[camera] = configure_cycles(target, args.device, args.gpu_name, args.threads)
         for frame in frames:
+            verify_selection(target, device_reports[camera])
             target.frame_set(frame)
             target.render.filepath = str((folder / f'frame_{frame:04d}.png').resolve())
             bpy.ops.render.render(write_still=True)
     write_json(args.out / 'result.json', {
         'success': True, 'blender_version': bpy.app.version_string,
         'blender_build_hash': bpy.app.build_hash.decode('utf-8', errors='replace'),
-        'device': 'CPU', 'mode': 'full' if args.full else 'preview',
+        'device': args.device, 'render_devices': device_reports, 'mode': 'full' if args.full else 'preview',
         'frames_per_camera': frames, 'width': scene['render']['width'], 'height': scene['render']['height'],
         'project_sha256': project_hashes,
         'framing': 'passed',

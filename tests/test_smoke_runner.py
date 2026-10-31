@@ -97,3 +97,20 @@ class SmokeRunnerTests(unittest.TestCase):
                             '-t', '1', '-c', 'copy', str(short)], check=True, capture_output=True, timeout=60)
             with self.assertRaisesRegex(ValueError, '150 frames'):
                 runner.verify_video(short)
+
+    def test_requested_hip_rejects_cpu_result(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            runner.write_json(folder / 'result.json', {
+                'success': True, 'roundtrip': 'passed', 'edited_subset_acceptance': 'passed', 'device': 'CPU'})
+            with self.assertRaisesRegex(ValueError, 'differs from the requested'):
+                runner.validate_outputs(folder, device='HIP')
+
+    def test_hip_result_requires_gpu_only_selection_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            runner.write_json(folder / 'result.json', {
+                'success': True, 'roundtrip': 'passed', 'edited_subset_acceptance': 'passed',
+                'device': 'HIP', 'render_devices': {}})
+            with self.assertRaisesRegex(ValueError, 'GPU-only selection evidence'):
+                runner.validate_outputs(folder, device='HIP')

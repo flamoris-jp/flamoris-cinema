@@ -7,6 +7,7 @@ import argparse
 import hashlib
 from fractions import Fraction
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from flamoris_cinema.interchange import validate_take
 from flamoris_cinema.io import read_json, write_json
+from flamoris_cinema.render_device import validate_options
 
 
 def native_project_container(path):
@@ -40,11 +42,21 @@ def native_project_container(path):
     raise ValueError('unrecognized native Blender project container')
 
 
-def validate_outputs(folder, full=False):
+def validate_outputs(folder, full=False, device=None):
     result = read_json(folder / 'result.json')
     if (result.get('success') is not True or result.get('roundtrip') != 'passed' or
-            result.get('edited_subset_acceptance') != 'passed' or result.get('device') != 'CPU'):
-        raise ValueError('Blender did not report successful CPU acceptance')
+            result.get('edited_subset_acceptance') != 'passed' or result.get('device') not in ('CPU', 'HIP')):
+        raise ValueError('Blender did not report successful acceptance')
+    if device is not None and result.get('device') != device:
+        raise ValueError('reported render device differs from the requested device')
+    if result.get('device') == 'HIP':
+        reports = result.get('render_devices', {})
+        for camera in ('wide', 'close'):
+            report = reports.get(camera, {})
+            selected = report.get('devices', [])
+            if (report.get('backend') != 'HIP' or report.get('cycles_device') != 'GPU' or
+                    report.get('cpu_render_enabled') is not False or len(selected) != 1 or selected[0].get('type') != 'HIP'):
+                raise ValueError('HIP result lacks explicit GPU-only selection evidence')
     frames = list(range(1, 151)) if full else [1, 76, 150]
     if result.get('frames_per_camera') != frames:
         raise ValueError('unexpected rendered sample set')
@@ -104,7 +116,7 @@ def encode_videos(folder, encoder, probe):
         output = folder / f'{camera}.mp4'
         command = [encoder, '-nostdin', '-v', 'error', '-n', '-framerate', '30', '-start_number', '1',
                    '-i', str(folder / camera / 'frame_%04d.png'), '-frames:v', '150',
-                   '-c:v', 'libx264', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(output)]
+                   '-c:v', 'libx264', '-threads', '2', '-filter_threads', '2', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(output)]
         with (folder / f'ffmpeg-{camera}.log').open('wb') as log:
             process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=300)
         if process.returncode:
@@ -114,7 +126,8 @@ def encode_videos(folder, encoder, probe):
     return outputs
 
 
-def run(blender, folder, full=False, timeout=900, encode=False):
+def run(blender, folder, full=False, timeout=900, encode=False, device='CPU', gpu_name=None, threads=2):
+    validate_options(device, gpu_name, threads)
     executable = shutil.which(str(blender))
     if executable is None:
         raise ValueError('Blender executable not found; pass --blender PATH')
@@ -127,19 +140,25 @@ def run(blender, folder, full=False, timeout=900, encode=False):
             raise ValueError('FFmpeg libx264 encoder is required before rendering')
     folder = Path(folder).resolve()
     folder.mkdir(parents=True, exist_ok=False)
-    command = [executable, '-b', '--factory-startup', '--disable-autoexec', '--python-exit-code', '1',
-               '--python', str(ROOT / 'blender/smoke_test.py'), '--', '--out', str(folder)]
+    command = [executable, '-b', '--factory-startup', '-t', str(threads), '--disable-autoexec', '--python-exit-code', '1',
+               '--python', str(ROOT / 'blender/smoke_test.py'), '--', '--out', str(folder), '--device', device, '--threads', str(threads)]
+    if gpu_name is not None:
+        command.extend(['--gpu-name', gpu_name])
     if full:
         command.append('--full')
     started = time.monotonic()
-    receipt = {'success': False, 'command': command, 'mode': 'full' if full else 'preview'}
+    receipt = {'success': False, 'command': command, 'mode': 'full' if full else 'preview',
+               'requested_device': device, 'threads': threads}
     try:
-        print(f'CPU render job started. Progress log: {folder / "blender.log"}', flush=True)
+        print(f'{device} render job started. Progress log: {folder / "blender.log"}', flush=True)
         with (folder / 'blender.log').open('wb') as log:
-            process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=timeout, check=False)
+            environment = os.environ.copy()
+            for name in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
+                environment[name] = str(threads)
+            process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=timeout, check=False, env=environment)
         if process.returncode != 0:
             raise ValueError(f'Blender exited with code {process.returncode}; inspect blender.log')
-        result = validate_outputs(folder, full)
+        result = validate_outputs(folder, full, device)
         receipt['blender_result'] = result
         if encode:
             receipt['videos'] = encode_videos(folder, encoder, probe)
@@ -168,6 +187,9 @@ def main(argv=None):
     parser.add_argument('--blender', default='blender', help='executable name or absolute path')
     parser.add_argument('--out', required=True, type=Path, help='NEW job directory, or existing directory with --check-only')
     parser.add_argument('--check-only', action='store_true', help='recheck existing output without Blender or changing files')
+    parser.add_argument('--device', choices=('CPU', 'HIP'), default='CPU')
+    parser.add_argument('--gpu-name', help='unique HIP GPU name/id fragment')
+    parser.add_argument('--threads', type=int, default=2, help='render/helper thread setting, 1..64; default 2')
     parser.add_argument('--full', action='store_true', help='render 150 frames per camera; default is 3 previews per camera')
     parser.add_argument('--encode', action='store_true', help='with --full, make and verify two 5-second MP4s using ffmpeg/ffprobe')
     parser.add_argument('--timeout', type=int, default=900, help='process timeout seconds (1..7200)')
@@ -183,7 +205,7 @@ def main(argv=None):
             print(json.dumps({'success': True, 'check_only': True, 'output': str(args.out.resolve()),
                               'blender_result': result}, ensure_ascii=False))
             return 0
-        receipt = run(args.blender, args.out, args.full, args.timeout, args.encode)
+        receipt = run(args.blender, args.out, args.full, args.timeout, args.encode, args.device, args.gpu_name, args.threads)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps({'success': receipt['success'], 'output': str(args.out.resolve()),

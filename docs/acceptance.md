@@ -58,3 +58,16 @@ in Blender. `framing.json` is collected by new jobs.
 silent MP4s. Encoding and ffprobe validation were exercised locally with generated
 solid-colour test frames; this is **not** evidence of rendering the actual complete
 Cinema scene. The real five-second two-camera render and visual review remain pending.
+
+## HIP preview preparation (actual Cinema GPU execution pending)
+
+Following the interrupted full CPU render, explicit HIP selection and two-thread
+render/helper defaults were added. Device-policy tests check exact GPU selection,
+CPU exclusion, ambiguous/missing-device failures and host refusal of CPU fallback
+reports. API-configuration test doubles are not real Blender/HIP acceptance.
+
+The next acceptance step is six actual 720p images using `--device HIP`, with
+Blender device logs, result metadata, elapsed time and live CPU/GPU telemetry.
+Only then proceed to the full sequence. A separately successful GPU installation
+smoke test does not complete this Cinema-specific acceptance step. Prior CPU preview
+evidence above remains valid and separate from HIP rendering.

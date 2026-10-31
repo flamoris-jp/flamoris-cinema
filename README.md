@@ -86,13 +86,34 @@ receipt, checksums and `cinema-smoke.zip`. A failed run returns nonzero and reta
 its logs/receipt; it never counts as accepted. Existing outputs can be rechecked without rendering or changing their receipt using `--check-only --out /path/to/existing-job`. Add `--full --timeout 7200` in a NEW
 job directory for all 150 frames per camera. Add `--encode` to also produce and
 verify `wide.mp4` and `close.mp4` (5 seconds, 720p, 30 fps). FFmpeg with libx264 and
-ffprobe must already be on PATH; the runner checks before rendering. This is CPU-only; installation GPU
+ffprobe must already be on PATH; the runner checks before rendering. This defaults to CPU; HIP is explicitly selectable as described below. Installation GPU
 smoke results do not by themselves verify Cinema rendering.
 
 Before any sample rendering, geometric preflight checks the whole sphere at all
 150 samples, reserving 5% of screen width/height along each edge; results are saved
 in `framing.json`. The close sample camera was reframed after the first real preview.
 This checks perspective clipping, not occlusion or final image appearance.
+
+### Explicit HIP preview
+
+```sh
+python tools/run_blender_smoke.py --blender /path/to/blender --device HIP --gpu-name "RX 9060 XT" --threads 2 --out /path/to/new-hip-preview
+```
+
+This renders the same six preview images. A single HIP GPU must match the name/id
+fragment. CPU and other render devices are disabled; missing/ambiguous GPUs fail
+instead of selecting CPU. Device selection is reapplied after native-file reload,
+checked before frames and recorded for each camera, including the effective HIP RT
+preference. Host validation rejects a CPU result when HIP was requested. Actual
+GPU execution/performance still needs the installed-runtime test and telemetry.
+
+The default render/helper thread setting is now 2 (`--threads 1..64`), also passed
+to Blender and common CPU math-library environment settings. MP4 encoding uses two
+threads. These are configuration limits, not an OS CPU quota or temperature limit;
+scene preparation/driver compilation and encoding can still use CPU resources.
+No runtime/service is started or stopped and user preferences are not saved.
+After reviewing the short HIP preview and temperatures, add `--full --encode` in a
+NEW directory to render complete videos. No resumed-frame mixing is implemented.
 
 ## Development checks
 
