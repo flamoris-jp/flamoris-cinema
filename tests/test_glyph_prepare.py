@@ -53,9 +53,9 @@ class PreparationTests(unittest.TestCase):
         from flamoris_cinema.glyph_prepare import prepare_asset, stage_take
         from flamoris_cinema.interchange import validate_take
         source_root = Path(os.environ['GLYPH_SOURCE'])
-        source = SkeletonSource(json.loads((source_root/'examples/skeletons.json').read_text()))
-        style = StyleDNA.from_dict(json.loads((source_root/'examples/tango.style.json').read_text()))
-        cues = parse_cues((source_root/'examples/demo.srt').read_text(), srt=True)
+        source = SkeletonSource(json.loads((source_root/'examples/skeletons.json').read_text(encoding='utf-8')))
+        style = StyleDNA.from_dict(json.loads((source_root/'examples/tango.style.json').read_text(encoding='utf-8')))
+        cues = parse_cues((source_root/'examples/demo.srt').read_text(encoding='utf-8'), srt=True)
         manifest, assets = compile_bundle(cues,source,song='Cinema Glyph source fixture',style=style,seed=42)
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp)/'bundle';write_bundle(bundle,manifest,assets)
@@ -65,7 +65,7 @@ class PreparationTests(unittest.TestCase):
             after = {str(p.relative_to(bundle)):hashlib.sha256(p.read_bytes()).hexdigest() for p in bundle.rglob('*') if p.is_file()}
             self.assertEqual(before,after)
             self.assertEqual(asset['data']['svg_sha256'], '7eb51f6adf0bd7c7dc97c49473f970b2dc41f9c891a34becd227d8ab88b22f30')
-            fixture = json.loads((Path(__file__).resolve().parents[1]/'examples/red_glyph.take.json').read_text())
+            fixture = json.loads((Path(__file__).resolve().parents[1]/'examples/red_glyph.take.json').read_text(encoding='utf-8'))
             self.assertEqual(asset['data']['paths'], fixture['scene']['actors'][0]['geometry']['asset']['data']['paths'])
             with self.assertRaisesRegex(ValueError,'occurrence'):
                 prepare_asset(bundle,'missing')
