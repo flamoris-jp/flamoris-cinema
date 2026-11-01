@@ -101,3 +101,9 @@ Cinemaに引き継ぎたいのは、**AIが読めて人も直せる、持続的�
 5. その時点のFLAMORISの制作環境と必要性を見て、実装の開始を人が判断する。
 
 **この文書は設計判断を保存するためのもの。再開や自動実行を指示しない。**
+
+## 2026-11-01: 旧Scene Engine Issueとの整合
+
+[Kachinco #124](https://github.com/flamoris-jp/flamoris-kachinco/issues/124)と[Glyph #3](https://github.com/flamoris-jp/flamoris-glyph/issues/3)は作成時の計画を履歴保存し、[CGの責任・依存関係整理](https://github.com/flamoris-jp/flamoris-CG/blob/main/docs/scene-engine-scope.md)へ接続する。単一シーン/素材クリップの制作研究はCG、形状契約はGlyph、受け取りと編集はKachincoが担当。Cinemaは将来の作品全体の意図・制作計画という構想と停止前の成果を保持する。
+
+既存のScene/TakeやGlyph adapterは比較・再利用検討の資料であり、CGの現在の形式・実装・実機受入れと同一視しない。新しい共通schemaや独立engine repositoryを必須にせず、Cinema再開を他ツールの開発条件にしない。今回の保守は文書の整理のみで、休眠判断・既存契約・検証証跡を変更しない。
